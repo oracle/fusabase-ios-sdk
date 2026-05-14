@@ -7,11 +7,6 @@
 // 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose
 // either license.
 //
-// If you elect to accept the software under the Universal Permissive License
-// (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl and Apache License
-// 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose
-// either license.
-//
 // If you elect to accept the software under the Apache License, Version 2.0,
 // the following applies:
 //

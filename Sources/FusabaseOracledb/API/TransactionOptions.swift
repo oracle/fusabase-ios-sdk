@@ -1,5 +1,5 @@
 // Copyright (c) 2015, 2025, Oracle and/or its affiliates.
-//
+
 //-----------------------------------------------------------------------------
 //
 // This software is dual-licensed to you under the Universal Permissive License
@@ -23,7 +23,8 @@
 // limitations under the License.
 //
 //-----------------------------------------------------------------------------
-//
+
+
 // TransactionOptions.swift
 //
 // Configuration options for transactions, controlling retry behavior and other
