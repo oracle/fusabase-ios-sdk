@@ -1,5 +1,5 @@
 // Copyright (c) 2015, 2025, Oracle and/or its affiliates.
-//
+
 //-----------------------------------------------------------------------------
 //
 // This software is dual-licensed to you under the Universal Permissive License
@@ -61,12 +61,6 @@ extension ListenerData: AnyListenerData {
  * Manages WebSocket connections for real-time data synchronization.
  * Handles listener registration, message processing, and connection lifecycle
  * for snapshot listeners that require real-time updates.
- *
- * This is a Swift translation of the Java WebSocketController, adapted to the
- * current iOS/macOS SDK structure. It integrates with:
- *  - FusabaseOracledb options and QueryHelper constants
- *  - FusabaseAuth/PersistenceUtils for token retrieval
- *  - ListenerManager/ListenerData for listener dispatch
  *
  * Notes:
  * - Since Swift Reference protocol does not expose a generic get(Source) API,

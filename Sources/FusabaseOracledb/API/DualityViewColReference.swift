@@ -1,5 +1,5 @@
 // Copyright (c) 2015, 2025, Oracle and/or its affiliates.
-//
+
 //-----------------------------------------------------------------------------
 //
 // This software is dual-licensed to you under the Universal Permissive License
@@ -23,13 +23,7 @@
 // limitations under the License.
 //
 //-----------------------------------------------------------------------------
-//
-//  DualityViewColReference.swift
-//  fusabase-ios-sdk
-//
-//  Swift translation of the Java class:
-//  com.oracle.database.oracledb.DualityViewColReference
-//
+
 //  Represents a reference to a duality view collection in the Oracledb database.
 //  Duality views provide a unified interface for accessing both document and
 //  relational data. This class provides methods for creating document references
