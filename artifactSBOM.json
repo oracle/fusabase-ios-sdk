@@ -1,0 +1,175 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:b51c9e0a-b839-48d3-b60c-6704a8b714a6",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-02-05T10:55:19Z",
+    "tools": {
+      "components": [
+        {
+          "group": "@cyclonedx",
+          "name": "cdxgen",
+          "version": "12.0.0",
+          "purl": "pkg:npm/%40cyclonedx/cdxgen@12.0.0",
+          "type": "application",
+          "bom-ref": "pkg:npm/@cyclonedx/cdxgen@12.0.0",
+          "author": "OWASP Foundation",
+          "publisher": "OWASP Foundation"
+        }
+      ]
+    },
+    "authors": [
+      {
+        "name": "OWASP Foundation"
+      }
+    ],
+    "lifecycles": [
+      {
+        "phase": "build"
+      }
+    ],
+    "component": {
+      "group": "",
+      "name": "fusabase-ios-sdk-orahub",
+      "version": "latest",
+      "type": "application",
+      "bom-ref": "pkg:swift/fusabase-ios-sdk-orahub@latest",
+      "purl": "pkg:swift/fusabase-ios-sdk-orahub@latest"
+    },
+    "properties": [
+      {
+        "name": "cdx:bom:componentTypes",
+        "value": "swift"
+      },
+      {
+        "name": "cdx:bom:componentNamespaces",
+        "value": "github.com/apple\\ngithub.com/swiftlang"
+      },
+      {
+        "name": "cdx:bom:componentSrcFiles",
+        "value": "Package.resolved\\nPackage.swift"
+      }
+    ]
+  },
+  "components": [
+    {
+      "group": "github.com/apple",
+      "name": "swift-docc-plugin",
+      "version": "1.4.5",
+      "purl": "pkg:swift/github.com/apple/swift-docc-plugin@1.4.5",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://github.com/apple/swift-docc-plugin"
+        }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:swift/github.com/apple/swift-docc-plugin@1.4.5",
+      "properties": [
+        {
+          "name": "SrcFile",
+          "value": "Package.resolved"
+        },
+        {
+          "name": "cdx:swift:packageName",
+          "value": "SwiftDocCPlugin"
+        },
+        {
+          "name": "cdx:swift:localCheckoutPath",
+          "value": ".build/checkouts/swift-docc-plugin"
+        }
+      ],
+      "evidence": {
+        "identity": {
+          "field": "purl",
+          "confidence": 1,
+          "methods": [
+            {
+              "technique": "manifest-analysis",
+              "confidence": 1,
+              "value": "/Users/mohitv/Downloads/fusabase-ios-sdk-orahub/Package.resolved"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "group": "github.com/swiftlang",
+      "name": "swift-docc-symbolkit",
+      "version": "1.0.0",
+      "purl": "pkg:swift/github.com/swiftlang/swift-docc-symbolkit@1.0.0",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://github.com/swiftlang/swift-docc-symbolkit"
+        }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:swift/github.com/swiftlang/swift-docc-symbolkit@1.0.0",
+      "properties": [
+        {
+          "name": "SrcFile",
+          "value": "Package.resolved"
+        },
+        {
+          "name": "cdx:swift:packageName",
+          "value": "SymbolKit"
+        },
+        {
+          "name": "cdx:swift:localCheckoutPath",
+          "value": ".build/checkouts/swift-docc-symbolkit"
+        }
+      ],
+      "evidence": {
+        "identity": {
+          "field": "purl",
+          "confidence": 1,
+          "methods": [
+            {
+              "technique": "manifest-analysis",
+              "confidence": 1,
+              "value": "/Users/mohitv/Downloads/fusabase-ios-sdk-orahub/Package.resolved"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "group": "",
+      "name": "fusabase-ios-sdk",
+      "version": "unspecified",
+      "purl": "pkg:swift/fusabase-ios-sdk@unspecified",
+      "type": "application",
+      "bom-ref": "pkg:swift/fusabase-ios-sdk@unspecified",
+      "properties": [
+        {
+          "name": "SrcPath",
+          "value": "/Users/mohitv/Downloads/fusabase-ios-sdk-orahub"
+        },
+        {
+          "name": "SrcFile",
+          "value": "Package.swift"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "pkg:swift/github.com/swiftlang/swift-docc-symbolkit@1.0.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:swift/github.com/apple/swift-docc-plugin@1.4.5",
+      "dependsOn": [
+        "pkg:swift/github.com/swiftlang/swift-docc-symbolkit@1.0.0"
+      ]
+    },
+    {
+      "ref": "pkg:swift/fusabase-ios-sdk@unspecified",
+      "dependsOn": [
+        "pkg:swift/github.com/apple/swift-docc-plugin@1.4.5"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+Packages/
+DerivedData/
+
+# Xcode Project User Settings
+*.xcworkspace
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad
+*.xcsettings
+
+# Build Products
+build/
+dist/
+*.ipa
+*.zip
+docs/
+fusabase-ios-sdk/
+Tests/*.zip
+Tests/
+# Xcode project workspace settings folder
+*.xcodeproj/project.xcworkspace/
+*.xcodeproj/xcuserdata/
+*.xcodeproj
+
+Package.resolved
+config.json
+# macOS Finder
+.DS_Store
+
+# Crash logs
+*.crash
+
+# Symbolicated debug symbols
+*.dSYM
+

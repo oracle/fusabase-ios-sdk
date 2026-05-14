@@ -1,0 +1,178 @@
+// Copyright (c) 2015, 2025, Oracle and/or its affiliates.
+//
+//-----------------------------------------------------------------------------
+//
+// This software is dual-licensed to you under the Universal Permissive License
+// (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl and Apache License
+// 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose
+// either license.
+//
+// If you elect to accept the software under the Apache License, Version 2.0,
+// the following applies:
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+//-----------------------------------------------------------------------------
+//
+//  DualityViewColReference.swift
+//  fusabase-ios-sdk
+//
+//  Swift translation of the Java class:
+//  com.oracle.database.oracledb.DualityViewColReference
+//
+//  Represents a reference to a duality view collection in the Oracledb database.
+//  Duality views provide a unified interface for accessing both document and
+//  relational data. This class provides methods for creating document references
+//  and performing collection operations within duality view contexts.
+//
+//-----------------------------------------------------------------------------
+
+import Foundation
+import os
+
+/**
+ A reference to a Duality View (DV) collection.
+
+ Duality views provide a unified interface for accessing both document and relational data.
+ This type exposes APIs to create document references within the DV and to add new documents
+ with auto-generated identifiers. It is analogous to CollectionReference for standard collections,
+ but uses DV-specific path semantics.
+
+ Notes:
+ - DV collections are top-level and do not have parent document references.
+ - The DV collection path is a single segment: the duality view name.
+
+ SeeAlso:
+ - DualityViewDocReference
+ */
+public class DualityViewColReference: Query {
+
+    // MARK: - Stored properties (public getters pattern)
+
+    // The unique identifier of this duality view collection (the dv name).
+    private var _collectionID: String
+
+    // The parent document reference (always nil for duality view collections).
+    private var _parent: DualityViewDocReference?
+
+    // The full path to this duality view collection (for DV, this is just the dv name).
+    private var _path: String
+
+    private static let logger = Logger(subsystem: "com.oracle.database.fusabase", category: "DualityViewColReference")
+
+    // MARK: - Public getters
+
+    /// The unique identifier (name) of this duality view collection.
+    public var collectionID: String { _collectionID }
+
+    /// The parent document reference of this collection; always nil for DV collections.
+    public var parent: DualityViewDocReference? { _parent }
+
+    /// The full path of this duality view collection in the database.
+    public override var path: String { _path }
+
+    // MARK: - Initializer
+
+    /// Creates a reference to a duality view (DV) collection in the database.
+    ///
+    /// Duality view collections are top-level collections that do not have parent documents.
+    ///
+    /// - Parameters:
+    ///   - oracledb: The database instance this collection belongs to.
+    ///   - path: The duality view name (single path segment).
+    /// - Precondition: `path` must contain exactly one segment (the DV name).
+    /// - Important: If `path` contains parent segments, this initializer traps with a fatal error.
+    /// - SeeAlso: `DualityViewDocReference`
+    /// - Example:
+    ///   ```
+    ///   let dvCol = DualityViewColReference(oracledb: db, path: "orders_dv")
+    ///   let dvDoc = dvCol.document("12345")
+    ///   ```
+    init(oracledb: FusabaseOracledb, path: String) {
+        // Tokenize input path
+        var tokens = path.components(separatedBy: "/").filter { !$0.isEmpty }
+        OracledbLogger.debug("DualityViewColReference init with tokens: \(tokens)")
+
+        // Extract collectionID (dv name)
+        let collectionID = tokens.isEmpty ? "" : tokens.removeLast()
+
+        // Enforce DV invariant: must be top-level (no parent segments)
+        if !tokens.isEmpty {
+            fatalError("DualityViewColReference will have its parents as nil. Path must be top-level.")
+        }
+
+        self._collectionID = collectionID
+        self._parent = nil
+        self._path = collectionID
+
+        // Initialize Query base class with the DV collection path
+        super.init(oracledb: oracledb, path: collectionID, isColGroup: false)
+    }
+
+    // MARK: - Document creation
+
+    /// Creates a new document in the duality view collection with an auto-generated ID.
+    /// The document ID will be generated by the database when the document is saved.
+    ///
+    /// - Returns: A reference to the new document.
+    public func document() -> DualityViewDocReference {
+        // Mirrors: new DualityViewDocReference(String.join("/", path), oradb, false)
+        return DualityViewDocReference(oracledb: super.oracledb, path: self.path, oidGenerated: false)
+    }
+
+    /// Creates a reference to an existing document in the duality view collection.
+    /// Use this method when you know the document ID.
+    ///
+    /// - Parameter documentPath: The path to the document within this collection.
+    /// - Returns: A reference to the specified document.
+    public func document(_ documentPath: String) -> DualityViewDocReference {
+        // Mirrors: new DualityViewDocReference(String.join("/", this.path) + "/" + documentPath, oradb, true)
+        let fullPath = self.path.isEmpty ? documentPath : (self.path + "/" + documentPath)
+        return DualityViewDocReference(oracledb: super.oracledb, path: fullPath, oidGenerated: true)
+    }
+
+    // MARK: - Convenience add
+
+    /// Adds a document to the duality view collection with an auto-generated ID.
+    /// This is a convenience method that creates a document reference and adds the data.
+    ///
+    /// - Parameter data: The document data to add.
+    /// - Returns: A task that resolves to the document reference once the document is added.
+    /// - Note: This mirrors Java's `Task<DualityViewDocReference> add(Object data)` by delegating to the document reference.
+    @available(macOS 10.15.0, *)
+    public func add(_ data: [String: Any]) async throws -> DualityViewDocReference {
+        return try await self.document().add(data)
+    }
+
+    // MARK: - Compatibility helpers (Java-style getters)
+
+    /// Gets the unique identifier of this duality view collection.
+    /// - Returns: The collection ID.
+    public func getId() -> String {
+        return collectionID
+    }
+
+    /// Gets the full path to this duality view collection in the database.
+    /// - Returns: The collection path.
+    public func getPath() -> String {
+        return path
+    }
+
+    /// Gets the parent document reference of this collection.
+    /// For duality view collections, this always returns nil since they are top-level collections.
+    ///
+    /// - Returns: Always nil for duality view collections.
+    public func getParent() -> DualityViewDocReference? {
+        return nil
+    }
+}
