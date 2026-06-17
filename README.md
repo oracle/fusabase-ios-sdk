@@ -8,6 +8,8 @@ An iOS SDK for Oracle Backend for Firebase (Fusabase) that provides authenticati
 - Storage APIs (upload/download, metadata, listing)
 - Automatic initialization from `fusabase-config.json`
 
+This Oracle Backend for Firebase iOS SDK follows the Firebase design, API patterns, and rules-based authorization model. Its SDK interfaces are designed to mirror the Firebase SDK interfaces so developers can move across backends with minimal changes. This Oracle Backend for Firebase iOS SDK is a distinct Oracle offering.
+
 ## Requirements
 
 - iOS 15.0+ / macOS 11.0+ / tvOS 13.0+ / watchOS 7.0+
