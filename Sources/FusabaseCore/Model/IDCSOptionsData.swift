@@ -27,14 +27,10 @@
 
 public struct IDCSConfig: Codable {
     var domain_url: String
-    var clientId: String
-    var clientSecret: String
 }
 
 extension IDCSConfig {
-    init(_ domain_url: String, _ clientId: String, _ clientSecret: String) {
+    init(_ domain_url: String) {
         self.domain_url = domain_url
-        self.clientId = clientId
-        self.clientSecret = clientSecret
     }
 }

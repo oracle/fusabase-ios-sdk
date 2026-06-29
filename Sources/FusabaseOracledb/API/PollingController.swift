@@ -223,7 +223,7 @@ final class PollingController<K: Reference, T: Snapshot> {
                     guard let self = self, let listenerData = listenerData else { return }
                     do {
                         if #available(macOS 10.15.0, *) {
-                            let snap = try await query.getDocuments()
+                            let snap = try await query.getDocuments(source: .server, snapshot: true)
                             let prev = listenerData.getPreviousResult()
                             if !listenerData.hasDeliveredInitialEvent || self.resultHasUpdated(current: snap, previous: prev) {
                                 OracledbLogger.info("Polling request succeeded for query \(query.path)")
@@ -251,7 +251,7 @@ final class PollingController<K: Reference, T: Snapshot> {
                     do {
                         // macOS 10.15+ async API
                         if #available(macOS 10.15.0, *) {
-                            let snap = try await docRef.getDocument()
+                            let snap = try await docRef.getDocument(source: .server, snapshot: true)
                             let prev = listenerData.getPreviousResult()
                             if !listenerData.hasDeliveredInitialEvent || self.resultHasUpdated(current: snap, previous: prev) {
                                 OracledbLogger.info("Polling request succeeded for \(docRef.path)")

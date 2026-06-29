@@ -48,11 +48,13 @@ class OnPremAuthHelper: AuthHelperProtocol {
 
     var _config: FusabaseOptions
     var ordsConfig: OnPremConfigHelper
+    private let middleware: AuthMiddlewareClient
     private var logger = Logger(subsystem: "com.oracle.database.fusabase", category: "auth")
 
     
     init(config: FusabaseOptions) {
         self._config = config
+        self.middleware = AuthMiddlewareClient(config: config, authPath: "onprem")
         let domainurl = _config.ordsHost + ":" + _config.ordsPort + "/ords/" + _config.schema + "/_/baas-services/idm/onprem/" + _config.projectId + "/"
         self.ordsConfig = OnPremConfigHelper(_domainURL: domainurl, _appID: _config.appId)
     }
@@ -222,7 +224,6 @@ class OnPremAuthHelper: AuthHelperProtocol {
             return AuthUserCompleteDetails(
                 accessToken: AuthTokenResult(rawToken: tokens.access_token, tokenKey: .access, persist: false),
                 refreshToken: tokens.refresh_token ?? "",
-                authnToken: nil,
                 userInfo: nil // No user details for linking
             )
         } else {
@@ -236,7 +237,6 @@ class OnPremAuthHelper: AuthHelperProtocol {
             return AuthUserCompleteDetails(
                 accessToken: try AuthTokenResult(token: tokens.access_token, tokenKey: .access),
                 refreshToken: tokens.refresh_token ?? "",
-                authnToken: nil,
                 userInfo: userDetails
             )
         }
@@ -259,7 +259,7 @@ class OnPremAuthHelper: AuthHelperProtocol {
 
         let userDetails = try self._getUserDetails(accessToken: authenticationDetails.access_token.token)
 
-        return AuthUserCompleteDetails(accessToken: authenticationDetails.access_token, refreshToken: authenticationDetails.refresh_token, authnToken: nil, userInfo: userDetails)
+        return AuthUserCompleteDetails(accessToken: authenticationDetails.access_token, refreshToken: authenticationDetails.refresh_token, userInfo: userDetails)
 
     }
     
@@ -279,7 +279,7 @@ class OnPremAuthHelper: AuthHelperProtocol {
 
         let userDetails = try self._getUserDetails(accessToken: authenticationDetails.access_token)
 
-        return AuthUserCompleteDetails(accessToken: try AuthTokenResult(token: authenticationDetails.access_token, tokenKey: .access), refreshToken: authenticationDetails.refresh_token!, authnToken: nil, userInfo: userDetails)
+        return AuthUserCompleteDetails(accessToken: try AuthTokenResult(token: authenticationDetails.access_token, tokenKey: .access), refreshToken: authenticationDetails.refresh_token!, userInfo: userDetails)
     }
 
     /**
@@ -302,7 +302,7 @@ class OnPremAuthHelper: AuthHelperProtocol {
 
         let userDetails = try self._getUserDetails(accessToken: authenticationDetails.access_token)
 
-        return AuthUserCompleteDetails(accessToken: try AuthTokenResult(rawToken: authenticationDetails.access_token, tokenKey: .access, persist: !link), refreshToken: authenticationDetails.refresh_token!, authnToken: nil, userInfo: userDetails)
+        return AuthUserCompleteDetails(accessToken: AuthTokenResult(rawToken: authenticationDetails.access_token, tokenKey: .access, persist: !link), refreshToken: authenticationDetails.refresh_token!, userInfo: userDetails)
     }
 
     /**
@@ -321,7 +321,7 @@ class OnPremAuthHelper: AuthHelperProtocol {
 
         let userDetails = try self._getUserDetails(accessToken: authenticationDetails.access_token)
 
-        return AuthUserCompleteDetails(accessToken: try AuthTokenResult(token: authenticationDetails.access_token, tokenKey: .access), refreshToken: authenticationDetails.refresh_token!, authnToken: nil, userInfo: userDetails)
+        return AuthUserCompleteDetails(accessToken: try AuthTokenResult(token: authenticationDetails.access_token, tokenKey: .access), refreshToken: authenticationDetails.refresh_token!, userInfo: userDetails)
     }
     
     /**
@@ -345,42 +345,16 @@ class OnPremAuthHelper: AuthHelperProtocol {
         - Returns : AuthenticationDetails.
      */
     func authenticateUser(email: String, password: String) async throws -> AuthenticationDetails {
-        let url = URL(string: ordsConfig.domainURL + ordsConfig.AUTHENTICATE_REST_EP)
-        
-        // 2. Create the JSON body
-        let requestBody: [String: Any] = [
-            "grant_type": "user_credentials",
-            "username": email,
-            "password": password
-        ]
-        
-        
-        // 3. Serialize the body to JSON data
-        guard let jsonData = try? JSONSerialization.data(withJSONObject: requestBody) else {
-            throw AuthErrorUtilities.internalError(message: "Couldn't parse request body for authentication.")
-        }
-        
-        // 4. Create the URLRequest
-        var request = URLRequest(url: url!)
-        request.httpMethod = "POST"
-        request.httpBody = jsonData
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        // 5. Perform the request and await the response
-        let (data, response) = try await AuthUtils.fusabaseCall(for: request)
-        
-        // 6. Check the response (similar to Utils.checkResponse in JavaScript)
-        if let httpResponse = response as? HTTPURLResponse {
-            try AuthUtils.checkResponse(response: httpResponse, data: data, method: "On authenticating user.")
-        } else {
-            throw AuthErrorUtilities.networkError(message: "Obtained a non-valid HTTP response.")
-        }
-        
-        // 7. parsing
-        let decoder = JSONDecoder()
-        guard let userDetails = try? decoder.decode(BearerTokenResponse.self, from: data) else {
-            throw AuthErrorUtilities.internalError(message: "Couldn't decode the user's details from the server.")
-        }
+        let userDetails: BearerTokenResponse = try await middleware.sendDecodable(
+            endpoint: ordsConfig.AUTHENTICATE_REST_EP,
+            method: "POST",
+            body: [
+                "grant_type": "user_credentials",
+                "username": email,
+                "password": password
+            ],
+            methodDescription: "On authenticating user."
+        )
         return AuthenticationDetails(access_token: try AuthTokenResult(token: userDetails.access_token, tokenKey: .access), refresh_token: userDetails.refresh_token!)
 
     }
@@ -416,8 +390,6 @@ class OnPremAuthHelper: AuthHelperProtocol {
             }
         }
 
-        let url = URL(string: ordsConfig.domainURL + ordsConfig.SIGN_IN_WITH_CREDENTIAL + "&method=\(method)&link=\(link ? 1 : 0)")
-
         let password: String
         if link, let emailCredential = credential as? EmailAuthCredential {
             // Use password provided in the credential first, else fallback to cached password.
@@ -443,31 +415,25 @@ class OnPremAuthHelper: AuthHelperProtocol {
             "password": password
         ]
 
-        guard let jsonData = try? JSONSerialization.data(withJSONObject: requestBody) else {
-            throw AuthErrorUtilities.internalError(message: "Couldn't parse request body for authentication with credential.")
-        }
-
-
-        var request = URLRequest(url: url!)
-        request.httpMethod = "POST"
-        request.httpBody = jsonData
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        // For linking, add Authorization header with current user's access token
+        var headers: [String: String] = [:]
         if link {
             if let accessToken = KeychainTokenStore.shared.read(.access), !accessToken.isEmpty {
-                request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+                headers["Authorization"] = "Bearer \(accessToken)"
             }
         }
 
-        let (data, response) = try await AuthUtils.fusabaseCall(for: request)
-        
-        if let httpResponse = response as? HTTPURLResponse {
-            try AuthUtils.checkResponse(response: httpResponse, data: data)
-        } else {
-            throw AuthErrorUtilities.networkError(message: "Obtained a non-valid HTTP response.")
-        }
-                
+        let data = try await middleware.send(
+            endpoint: ordsConfig.SIGN_IN_WITH_CREDENTIAL,
+            method: "POST",
+            body: requestBody,
+            headers: headers,
+            queryItems: [
+                URLQueryItem(name: "method", value: method),
+                URLQueryItem(name: "link", value: link ? "1" : "0")
+            ],
+            methodDescription: "Sign in with credential."
+        )
+
         // For linking operations, return current user's tokens instead of server response tokens
         if link {
             let currentAccessToken = KeychainTokenStore.shared.read(.access) ?? ""
@@ -478,10 +444,6 @@ class OnPremAuthHelper: AuthHelperProtocol {
                 token_type: "Bearer",
                 expires_in: 3600, // Default expiration
                 refresh_token: currentRefreshToken,
-                authn_token: nil,
-                authn_refresh_token: nil,
-                idcs_access_token: nil,
-                idcs_refresh_token: nil,
                 persistToKeychain: false
             )
         } else {
@@ -500,30 +462,17 @@ class OnPremAuthHelper: AuthHelperProtocol {
         - Returns : Tokens from authentication
      */
     func redirectResult(code: String) async throws -> BearerTokenResponse {
-        let url = URL(string: ordsConfig.domainURL + ordsConfig.REDIRECT_RESULT_EP)
         let verifier = KeychainTokenStore.shared.read(.codeVerifier) ?? ""
 
-        let requestBody: [String: Any] = [
-            "code": code,
-            "code_verifier": verifier
-        ]
-
-        guard let jsonData = try? JSONSerialization.data(withJSONObject: requestBody) else {
-            throw AuthErrorUtilities.internalError(message: "Couldn't parse request body for authentication with credential.")
-        }
-
-        var request = URLRequest(url: url!)
-        request.httpMethod = "POST"
-        request.httpBody = jsonData
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let (data, response) = try await AuthUtils.fusabaseCall(for: request)
-
-        if let httpResponse = response as? HTTPURLResponse {
-            try AuthUtils.checkResponse(response: httpResponse, data: data)
-        } else {
-            throw AuthErrorUtilities.networkError(message: "Obtained a non-valid HTTP response.")
-        }
+        let data = try await middleware.send(
+            endpoint: ordsConfig.REDIRECT_RESULT_EP,
+            method: "POST",
+            body: [
+                "code": code,
+                "code_verifier": verifier
+            ],
+            methodDescription: "Redirect result."
+        )
 
         // Parse JSON to check response structure
         guard let jsonObject = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] else {
@@ -537,10 +486,6 @@ class OnPremAuthHelper: AuthHelperProtocol {
                 token_type: "Bearer",
                 expires_in: 3600, // Default expiration
                 refresh_token: nil,
-                authn_token: nil,
-                authn_refresh_token: nil,
-                idcs_access_token: nil,
-                idcs_refresh_token: nil,
                 persistToKeychain: false
             )
         }
@@ -560,39 +505,17 @@ class OnPremAuthHelper: AuthHelperProtocol {
         - Parameter password: String
      */
     func registerUser(email: String, password: String) async throws {
-        
-        let url = URL(string: ordsConfig.domainURL + ordsConfig.SELF_REGISTER_EP)
-        
-        // 2. Create the JSON body
-        let requestBody: [String: Any] = [
-            "first_name": "-",
-            "last_name": "-",
-            "email": email,
-            "password": password
-        ]
-        
-        
-        // 3. Serialize the body to JSON data
-        guard let jsonData = try? JSONSerialization.data(withJSONObject: requestBody) else {
-            fatalError("Error serializing JSON")
-        }
-        
-        // 4. Create the URLRequest
-        var request = URLRequest(url: url!)
-        request.httpMethod = "POST"
-        request.httpBody = jsonData
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-
-        // 5. Perform the request and await the response
-        let (data, response) = try await AuthUtils.fusabaseCall(for: request)
-        
-        if let httpResponse = response as? HTTPURLResponse {
-            try AuthUtils.checkResponse(response: httpResponse, data: data, method: "User registration.")
-        } else {
-            throw AuthErrorUtilities.networkError(message: "Obtained a non-valid HTTP response.")
-        }
-                
+        _ = try await middleware.send(
+            endpoint: ordsConfig.SELF_REGISTER_EP,
+            method: "POST",
+            body: [
+                "first_name": "-",
+                "last_name": "-",
+                "email": email,
+                "password": password
+            ],
+            methodDescription: "User registration."
+        )
     }
     
     /**
@@ -609,33 +532,18 @@ class OnPremAuthHelper: AuthHelperProtocol {
         - Parameter withEmail: String that contains the user's email
      */
     func sendPasswordResetHelper(withEmail: String) async throws {
-        // Build GET URL:
-        // {domainURL}sendemail?apiKey={appId}&email={email}&requesttype=resetpwd
-        guard let encodedEmail = withEmail.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
-            throw AuthErrorUtilities.invalidEmailError(message: "Invalid email provided.")
-        }
-        let urlString = ordsConfig.domainURL
-            + ordsConfig.SEND_PASSWORD_RESET_EMAIL
-            + "&email=\(encodedEmail)&requesttype=resetpwd"
-
-        guard let url = URL(string: urlString) else {
-            throw AuthErrorUtilities.internalError(message: "Couldn't construct password reset URL.")
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let (data, response) = try await AuthUtils.fusabaseCall(for: request)
-
-        if let httpResponse = response as? HTTPURLResponse {
-            try AuthUtils.checkResponse(response: httpResponse, data: data, method: "Password reset email request.")
-            // Store the email for use in password reset confirmation
-            UserDefaults.standard.set(withEmail, forKey: "password_reset_email")
-            logger.info("Password reset email request sent successfully.")
-        } else {
-            throw AuthErrorUtilities.networkError(message: "Obtained a non-valid HTTP response.")
-        }
+        _ = try await middleware.send(
+            endpoint: ordsConfig.SEND_PASSWORD_RESET_EMAIL,
+            method: "GET",
+            headers: ["Content-Type": "application/json"],
+            queryItems: [
+                URLQueryItem(name: "email", value: withEmail),
+                URLQueryItem(name: "requesttype", value: "resetpwd")
+            ],
+            methodDescription: "Password reset email request."
+        )
+        UserDefaults.standard.set(withEmail, forKey: "password_reset_email")
+        logger.info("Password reset email request sent successfully.")
     }
     
     /**
@@ -644,36 +552,17 @@ class OnPremAuthHelper: AuthHelperProtocol {
         - Returns: Dictionary with the verification result
      */
     func verifyPasswordResetCodeHelper(code: String) async throws -> [String: Any] {
-        guard let encodedCode = code.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
-            throw AuthErrorUtilities.internalError(message: "Invalid code provided.")
-        }
-        let urlString = ordsConfig.domainURL
-            + ordsConfig.VERIFY_PASSWORD_RESET_CODE
-            // Keep query parameter casing aligned with Android SDK and ORDS backend expectations.
-            // Android uses `requesttype` (lowercase 't') for On-Prem password reset flows.
-            + "&code=\(encodedCode)&requesttype=resetpwd"
-        
-        guard let url = URL(string: urlString) else {
-            throw AuthErrorUtilities.internalError(message: "Couldn't construct verify password reset URL.")
-        }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        let (data, response) = try await AuthUtils.fusabaseCall(for: request)
-        
-        if let httpResponse = response as? HTTPURLResponse {
-            try AuthUtils.checkResponse(response: httpResponse, data: data, method: "Verify password reset code.")
-            logger.info("Verify password reset request sent successfully.")
-        } else {
-            throw AuthErrorUtilities.networkError(message: "Obtained a non-valid HTTP response.")
-        }
-        
-        guard let jsonObject = try? JSONSerialization.jsonObject(with: data, options: []),
-              let result = jsonObject as? [String: Any] else {
-            throw AuthErrorUtilities.internalError(message: "Couldn't parse verify password reset response.")
-        }
+        let result = try await middleware.sendJSON(
+            endpoint: ordsConfig.VERIFY_PASSWORD_RESET_CODE,
+            method: "GET",
+            headers: ["Content-Type": "application/json"],
+            queryItems: [
+                URLQueryItem(name: "code", value: code),
+                URLQueryItem(name: "requesttype", value: "resetpwd")
+            ],
+            methodDescription: "Verify password reset code."
+        )
+        logger.info("Verify password reset request sent successfully.")
         return result
     }
     
@@ -690,45 +579,18 @@ class OnPremAuthHelper: AuthHelperProtocol {
             throw AuthErrorUtilities.internalError(message: "No password reset request found. Please request a password reset first.")
         }
 
-        guard let encodedStoredEmail = storedEmail.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
-            throw AuthErrorUtilities.internalError(message: "Invalid email stored.")
-        }
-
-        let urlString = ordsConfig.domainURL
-            + ordsConfig.CONFIRM_PASSWORD_RESET
-            + "&email=\(encodedStoredEmail)"
-
-        guard let url = URL(string: urlString) else {
-            throw AuthErrorUtilities.internalError(message: "Couldn't construct confirm password reset URL.")
-        }
-
-        let body: [String: Any] = [
-            "password": newPassword,
-            "code": code
-        ]
-
-        guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
-            throw AuthErrorUtilities.internalError(message: "Couldn't parse JSON body for confirming password reset.")
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.httpBody = jsonData
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let (data, response) = try await AuthUtils.fusabaseCall(for: request)
-
-        if let httpResponse = response as? HTTPURLResponse {
-            try AuthUtils.checkResponse(response: httpResponse, data: data, method: "Confirm password reset.")
-            logger.info("Confirm password reset request sent successfully.")
-        } else {
-            throw AuthErrorUtilities.networkError(message: "Obtained a non-valid HTTP response.")
-        }
-
-        guard let jsonObject = try? JSONSerialization.jsonObject(with: data, options: []),
-              let result = jsonObject as? [String: Any] else {
-            throw AuthErrorUtilities.internalError(message: "Couldn't parse confirm password reset response.")
-        }
+        let result = try await middleware.sendJSON(
+            endpoint: ordsConfig.CONFIRM_PASSWORD_RESET,
+            method: "POST",
+            body: [
+                "password": newPassword,
+                "code": code
+            ],
+            headers: ["Content-Type": "application/json"],
+            queryItems: [URLQueryItem(name: "email", value: storedEmail)],
+            methodDescription: "Confirm password reset."
+        )
+        logger.info("Confirm password reset request sent successfully.")
         return result
     }
 
@@ -739,23 +601,19 @@ class OnPremAuthHelper: AuthHelperProtocol {
      */
     func socialUnlinkHelperInternal(provider: String) async throws -> BearerTokenResponse {
         let method = provider.split(separator: ".").first.map(String.init) ?? provider
-        let url = URL(string: ordsConfig.domainURL + ordsConfig.SIGN_IN_WITH_CREDENTIAL + "&method=\(method)")
 
-        var request = URLRequest(url: url!)
-        request.httpMethod = "DELETE"
-
-        // Add Authorization header with current user's access token
+        var headers: [String: String] = [:]
         if let accessToken = KeychainTokenStore.shared.read(.access), !accessToken.isEmpty {
-            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            headers["Authorization"] = "Bearer \(accessToken)"
         }
 
-        let (data, response) = try await AuthUtils.fusabaseCall(for: request)
-
-        if let httpResponse = response as? HTTPURLResponse {
-            try AuthUtils.checkResponse(response: httpResponse, data: data)
-        } else {
-            throw AuthErrorUtilities.networkError(message: "Obtained a non-valid HTTP response.")
-        }
+        _ = try await middleware.send(
+            endpoint: ordsConfig.SIGN_IN_WITH_CREDENTIAL,
+            method: "DELETE",
+            headers: headers,
+            queryItems: [URLQueryItem(name: "method", value: method)],
+            methodDescription: "Social unlink."
+        )
 
         // For unlink operations, return current user's tokens instead of server response tokens
         let currentAccessToken = KeychainTokenStore.shared.read(.access) ?? ""
@@ -766,10 +624,6 @@ class OnPremAuthHelper: AuthHelperProtocol {
             token_type: "Bearer",
             expires_in: 3600, // Default expiration
             refresh_token: currentRefreshToken,
-            authn_token: nil,
-            authn_refresh_token: nil,
-            idcs_access_token: nil,
-            idcs_refresh_token: nil,
             persistToKeychain: true  // Unlink can persist since it doesn't change user tokens
         )
     }
@@ -788,26 +642,11 @@ class OnPremAuthHelper: AuthHelperProtocol {
         - Parameter refreshToken: String
      */
     func revokeRefreshToken(_ refreshToken: String) async throws {
-        let url = URL(string: ordsConfig.domainURL + ordsConfig.REVOKE_REFRESH_TOKEN )
-        let body = [
-            "token": refreshToken
-        ]
-        
-        guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
-            fatalError("Error serializing JSON")
-        }
-        
-        var request = URLRequest(url: url!)
-        request.httpMethod = "PUT"
-        request.httpBody = jsonData
-        
-        let (data, response) = try await AuthUtils.fusabaseCall(for: request)
-        
-        if let httpResponse = response as? HTTPURLResponse {
-            try AuthUtils.checkResponse(response: httpResponse, data: data, method: "User registration.")
-        } else {
-            throw AuthErrorUtilities.networkError(message: "Obtained a non-valid HTTP response.")
-        }
-        
+        _ = try await middleware.send(
+            endpoint: ordsConfig.REVOKE_REFRESH_TOKEN,
+            method: "PUT",
+            body: ["token": refreshToken],
+            methodDescription: "Refresh token revocation."
+        )
     }
 }

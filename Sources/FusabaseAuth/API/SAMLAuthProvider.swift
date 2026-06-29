@@ -109,32 +109,7 @@ open class SAMLAuthProvider : FederatedAuthProvider, AuthProvider {
         let details = try await self.auth._authHelper.signInWithRedirectHelper(providerID: self.providerID,
                                                                                callbackScheme: self.callbackScheme,
                                                                                presentationContext: presentationContext)
-        let access = details.accessToken.token
-        let refresh = details.refreshToken
-
-        // Retrieve user details and construct FusabaseUser
-        let userDetails = try self.auth._authHelper._getUserDetails(accessToken: access)
-        let newUser = FusabaseUser(user: userDetails,
-                                userRefreshToken: refresh,
-                                accessToken: details.accessToken,
-                                auth: self.auth)
-
-        try await self.auth.updateCurrentUser(newUser)
-
-        // Construct a generic or provider-specific AuthCredential
-        let idToken = try await newUser.getIDToken()
-        let credential: AuthCredential
-        if self.providerID == "google" {
-            credential = GoogleAuthCredential(withIDToken: idToken, accessToken: idToken)
-        } else if self.providerID == "facebook" {
-            credential = FacebookAuthCredential(withAccessToken: idToken)
-        } else if self.providerID == "github" {
-            credential = GithubAuthCredential(withToken: idToken)
-        } else {
-            credential = AuthCredential(provider: self.providerID)
-        }
-
-        return UserCredential(user: newUser, credential: credential)
+        return try await self.auth._createCredentialsFromRedirectResult(details, provider: self)
     }
 
     #if canImport(UIKit)

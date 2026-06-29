@@ -68,6 +68,9 @@ class QueryHelper {
     // ONPREM service path.
     static let ONPREM = "/onprem"
 
+    // IDCS service path.
+    static let IDCS = "/idcs"
+
     // Authorize snapshot path.
     static let AUTHORIZE_SNAPSHOT = "/authorizeSnapshot"
 
@@ -274,9 +277,9 @@ class QueryHelper {
       - Returns: A dictionary containing the document's data.
     */
     @available(macOS 10.15.0, *)
-    func fetchDocuments(ref: Any, completion: ((Error?) -> Void)? = nil) async throws -> [String: Any] {
+    func fetchDocuments(ref: Any, snapshot: Bool = false, completion: ((Error?) -> Void)? = nil) async throws -> [String: Any] {
 
-        let req = try setHttpRequest(queryHelperFunc: QueryHelperFunc.qryDoc, ref: ref)
+        let req = try setHttpRequest(queryHelperFunc: QueryHelperFunc.qryDoc, ref: ref, snapshot: snapshot)
         let (data, resp) = try await SecureNetworking.secureSession.data(for: req)
         // Parity with Android: on 403/404, return empty result instead of throwing
         if let httpResp = resp as? HTTPURLResponse, httpResp.statusCode == 403 || httpResp.statusCode == 404 {

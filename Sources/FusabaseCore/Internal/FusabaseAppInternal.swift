@@ -32,7 +32,7 @@ internal class FusabaseAppInternal {
     private static let defaultAppName: String = "__FUSABASEAPP_DEFAULT"
     
     internal static func configure() {
-        _app = FusabaseApp(name: defaultAppName, options: FusabaseOptions.defaultOptions()!)
+        configure(options: FusabaseOptions.defaultOptions()!)
     }
     
     internal static func configure(options: FusabaseOptions) {
@@ -40,6 +40,7 @@ internal class FusabaseAppInternal {
         guard !options.projectId.isEmpty else {
             fatalError("Invalid options: projectId cannot be empty")
         }
+        PersistenceUtils.configureKeychainService(options: options)
         self._app = FusabaseApp(name: defaultAppName, options: options)
     }
     
@@ -48,6 +49,7 @@ internal class FusabaseAppInternal {
         guard !options.projectId.isEmpty else {
             fatalError("Invalid options: projectId cannot be empty")
         }
+        PersistenceUtils.configureKeychainService(options: options)
         self._app = FusabaseApp(name: name, options: options)
     }
     

@@ -364,9 +364,9 @@ public class DocumentReference : @unchecked Sendable, Equatable {
      - Throws: An error if the fetch fails.
      */
     @available(macOS 10.15.0, *)
-    func getDocument(source: OracledbSource) async throws -> DocumentSnapshot {
+    func getDocument(source: OracledbSource, snapshot: Bool = false) async throws -> DocumentSnapshot {
         // For now, ignore source and just fetch
-        return try await getDocument()
+        return try await getDocument(snapshot: snapshot)
     }
 
     // MARK: - Writes (Fire-and-forget wrappers)
@@ -462,9 +462,9 @@ public class DocumentReference : @unchecked Sendable, Equatable {
      - Throws: An error if the document retrieval fails.
      */
     @available(macOS 10.15.0, *)
-    public func getDocument() async throws -> DocumentSnapshot {
+    func getDocument(snapshot: Bool) async throws -> DocumentSnapshot {
         do {
-            let promJson = try await self.queryHelper.fetchDocuments(ref: self)
+            let promJson = try await self.queryHelper.fetchDocuments(ref: self, snapshot: snapshot)
             let metadata = SnapshotMetadata(fromCache: false, hasPendingWrites: false)
 
             OracledbLogger.debug("Fetched promJson: \(promJson)")
@@ -499,6 +499,11 @@ public class DocumentReference : @unchecked Sendable, Equatable {
             }
             throw err
         }
+    }
+
+    @available(macOS 10.15.0, *)
+    public func getDocument() async throws -> DocumentSnapshot {
+        return try await getDocument(snapshot: false)
     }
 
     // MARK: - Utilities

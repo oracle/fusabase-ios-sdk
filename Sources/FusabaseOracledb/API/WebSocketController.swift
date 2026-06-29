@@ -113,6 +113,8 @@ final class WebSocketController: NSObject, URLSessionWebSocketDelegate {
     // Message queue and listener registry
     /// In-memory queue of inbound messages keyed by queryId pending initial snapshot availability.
     private var messageQueue: [[String: Any]] = []
+    /// Outbound frames collected while URLSession is still completing the WebSocket handshake.
+    private var pendingOutboundMessages: [[String: Any]] = []
     /// Map of queryId to registered listeners. Protected by syncQueue.
     private var registeredQuery: [Int: [AnyListenerData]] = [:]
 
@@ -222,14 +224,17 @@ final class WebSocketController: NSObject, URLSessionWebSocketDelegate {
     ///            cannot be used (e.g. missing auth token, authorizeSnapshot failure, unsupported OS).
     @discardableResult
     func establishWebSocketConnection() -> Bool {
-        var alreadyInProgress = false
-        syncQueue.sync {
-            alreadyInProgress = self.webSocketConnectionInProgress
-            if !alreadyInProgress {
+        var shouldStartConnection = false
+        syncQueue.sync(flags: .barrier) {
+            if !self.isConnected && !self.webSocketConnectionInProgress {
                 self.webSocketConnectionInProgress = true
+                shouldStartConnection = true
             }
         }
-        if alreadyInProgress { return true }
+        if !shouldStartConnection {
+            logger.debug("WebSocket connection already established or connecting")
+            return true
+        }
 
         // If no access token, warn and skip establishing WS; HTTP path will continue with apiKey-only requests.
         var hasAccessToken = false
@@ -265,23 +270,20 @@ final class WebSocketController: NSObject, URLSessionWebSocketDelegate {
             return false
         }
 
-        logger.debug("Created WS URI \(wsURL.absoluteString)")
+        logger.info("Created WS URI \(wsURL.scheme ?? "ws")://\(wsURL.host ?? "<unknown>")\(wsURL.path)")
 
         if #available(macOS 10.15, iOS 15.0, *) {
-            let config = URLSessionConfiguration.default
+            let config = SecureNetworking.secureDefaultConfiguration()
             // No cookies or persistent caches for WS
             config.requestCachePolicy = .reloadIgnoringLocalCacheData
-            // Enforce TLS 1.2 minimum for security
-            config.tlsMinimumSupportedProtocolVersion = .TLSv12
             self.session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
             self.webSocketTask = self.session?.webSocketTask(with: wsURL)
-            self.webSocketTask?.resume()
-            logger.debug("WebSocket connection attempt started")
-
-            syncQueue.async(flags: .barrier) {
+            syncQueue.sync(flags: .barrier) {
                 self.shouldContinueReceiving = true
                 self.lastReceiveErrorKey = nil
             }
+            self.webSocketTask?.resume()
+            logger.info("WebSocket connection attempt started")
 
             // Start receive loop
             self.receiveLoop()
@@ -309,6 +311,7 @@ final class WebSocketController: NSObject, URLSessionWebSocketDelegate {
                 self.webSocketConnectionInProgress = false
                 self.shouldContinueReceiving = false
                 self.lastReceiveErrorKey = nil
+                self.pendingOutboundMessages.removeAll()
             }
             logger.debug("Connection with ords-baas-server closed.")
         }
@@ -364,7 +367,9 @@ final class WebSocketController: NSObject, URLSessionWebSocketDelegate {
         if messageObject["success"] != nil {
             // After successful registration, we must emit a first snapshot
             for listenerData in listeners {
-                fetchAndEmitInitialSnapshot(for: listenerData, queryId: queryId)
+                if listenerData.anyPreviousResult == nil {
+                    fetchAndEmitInitialSnapshot(for: listenerData, queryId: queryId)
+                }
             }
         } else if let errorMessage = messageObject["error"] as? String {
             logger.error("Error received from ORDS \(errorMessage)")
@@ -401,12 +406,12 @@ final class WebSocketController: NSObject, URLSessionWebSocketDelegate {
                 guard let self = self else { return }
                 do {
                     if let docRef = listenerData.anyReference as? DocumentReference {
-                        let snap = try await docRef.getDocument()
+                        let snap = try await docRef.getDocument(source: .server, snapshot: true)
                         listenerData.executeAny(snap, nil)
                         // Process any queued notifications now that initial snapshot exists
                         self.processQueue(queryId)
                     } else if let query = listenerData.anyReference as? Query {
-                        let snap = try await query.getDocuments()
+                        let snap = try await query.getDocuments(source: .server, snapshot: true)
                         listenerData.executeAny(snap, nil)
                         self.processQueue(queryId)
                     } else {
@@ -577,12 +582,23 @@ final class WebSocketController: NSObject, URLSessionWebSocketDelegate {
     /// Delegate callback fired when the WebSocket handshake completes.
     /// Sets connection flags and starts keepalive ping.
     func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
-        OracledbLogger.debug("Connection with ords-baas-server established.")
+        OracledbLogger.info("Connection with ords-baas-server established.")
         syncQueue.async(flags: .barrier) {
             self.isConnected = true
             self.webSocketConnectionInProgress = false
             self.shouldContinueReceiving = true
             self.lastReceiveErrorKey = nil
+
+            let pending = self.pendingOutboundMessages
+            self.pendingOutboundMessages.removeAll()
+            if !pending.isEmpty {
+                OracledbLogger.debug("Flushing \(pending.count) queued WebSocket message(s)")
+                DispatchQueue.global(qos: .utility).async {
+                    for message in pending {
+                        self.sendFrame(message, using: webSocketTask)
+                    }
+                }
+            }
         }
         startPingTimer()
     }
@@ -597,6 +613,7 @@ final class WebSocketController: NSObject, URLSessionWebSocketDelegate {
             self.webSocketConnectionInProgress = false
             self.shouldContinueReceiving = false
             self.lastReceiveErrorKey = nil
+            self.pendingOutboundMessages.removeAll()
         }
     }
 
@@ -605,32 +622,14 @@ final class WebSocketController: NSObject, URLSessionWebSocketDelegate {
     /// Resets connection flags and stops keepalive ping.
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         if let error = error {
-            OracledbLogger.debug("Connection with ords-baas-server failed: \(error.localizedDescription)")
+            OracledbLogger.error("Connection with ords-baas-server failed: \(error.localizedDescription)")
         }
         stopPingTimer()
         syncQueue.async(flags: .barrier) {
             self.isConnected = false
             self.webSocketConnectionInProgress = false
             self.shouldContinueReceiving = false
-        }
-    }
-
-    // MARK: - URLSessionDelegate (TLS trust handling)
-
-    /// Supports dev/test environments that use self-signed certificates, consistent with HTTP behavior.
-    /// Controlled by `FusabaseOptions.allowsSelfSignedCertificates`.
-    func urlSession(_ session: URLSession,
-                    didReceive challenge: URLAuthenticationChallenge,
-                    completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
-
-        let allowsSelfSigned = oracledb.app.options.allowsSelfSignedCertificates
-        if allowsSelfSigned,
-           challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
-           let serverTrust = challenge.protectionSpace.serverTrust {
-            OracledbLogger.debug("WebSocket: Accepting self-signed certificate for \(challenge.protectionSpace.host)")
-            completionHandler(.useCredential, URLCredential(trust: serverTrust))
-        } else {
-            completionHandler(.performDefaultHandling, nil)
+            self.pendingOutboundMessages.removeAll()
         }
     }
 
@@ -638,19 +637,44 @@ final class WebSocketController: NSObject, URLSessionWebSocketDelegate {
 
     private func sendMessage(_ message: [String: Any]) {
         guard #available(macOS 10.15, iOS 15.0, *) else { return }
-        // If we already encountered a terminal failure, don't keep trying to send frames.
-        var continueReceiving = false
-        syncQueue.sync {
-            continueReceiving = self.shouldContinueReceiving
+        var action: SendAction = .skip("connection not available")
+        syncQueue.sync(flags: .barrier) {
+            if self.isConnected {
+                if let task = self.webSocketTask {
+                    action = .send(task)
+                } else {
+                    action = .skip("no active task")
+                }
+            } else if self.webSocketConnectionInProgress {
+                self.pendingOutboundMessages.append(message)
+                action = .queued
+            } else if !self.shouldContinueReceiving {
+                action = .skip("connection not available")
+            } else {
+                action = .skip("connection not open")
+            }
         }
-        if !continueReceiving {
-            OracledbLogger.warning("WebSocket send skipped: connection not available")
+
+        switch action {
+        case .send(let task):
+            sendFrame(message, using: task)
+        case .queued:
+            OracledbLogger.debug("WebSocket send queued until connection opens")
+        case .skip(let reason):
+            OracledbLogger.warning("WebSocket send skipped: \(reason)")
             return
         }
-        guard let task = self.webSocketTask else {
-            OracledbLogger.warning("WebSocket send skipped: no active task")
-            return
-        }
+    }
+
+    @available(macOS 10.15, iOS 15.0, *)
+    private enum SendAction {
+        case send(URLSessionWebSocketTask)
+        case queued
+        case skip(String)
+    }
+
+    @available(macOS 10.15, iOS 15.0, *)
+    private func sendFrame(_ message: [String: Any], using task: URLSessionWebSocketTask) {
         guard let data = try? JSONSerialization.data(withJSONObject: message, options: []),
               let text = String(data: data, encoding: .utf8) else {
             OracledbLogger.error("Failed to serialize WebSocket message")
@@ -711,21 +735,21 @@ final class WebSocketController: NSObject, URLSessionWebSocketDelegate {
     private func buildAuthorizationHeader() throws -> String? {
         var authHeader: String?
         KeychainTokenStore.shared.withSecureToken(.access) { token in
+            guard !token.isEmpty else { return }
             authHeader = "Bearer " + token
         }
         return authHeader
     }
 
-    /// Retrieves the snapshot token required for WebSocket authentication.
-    private func getSnapshotToken() throws -> [String: Any] {
+    private func getSnapshotToken(forAuthPath authPath: String) throws -> [String: Any] {
         let options = oracledb.app.options
 
-        // Build URL: {ordsHost}:{ordsPort}/ords/{schema}/_/baas-services/idm/onprem/{projectId}/authorizeSnapshot?apiKey={appId}
+        // Build URL: {ordsHost}:{ordsPort}/ords/{schema}/_/baas-services/idm/{authPath}/{projectId}/authorizeSnapshot?apiKey={appId}
         let urlStr = options.ordsHost + ":" + options.ordsPort
             + "/ords/" + options.schema
             + QueryHelper.BAAS_SERVICE
             + QueryHelper.IDM
-            + QueryHelper.ONPREM
+            + authPath
             + "/" + options.projectId
             + QueryHelper.AUTHORIZE_SNAPSHOT
             + "?apiKey=" + options.appId
@@ -765,7 +789,7 @@ final class WebSocketController: NSObject, URLSessionWebSocketDelegate {
         }
         guard (200...299).contains(resp.statusCode) else {
             let msg = String(data: data, encoding: .utf8) ?? "<no body>"
-            OracledbLogger.warning("authorizeSnapshot failed with response message \(msg)")
+            OracledbLogger.warning("authorizeSnapshot for \(authPath) failed with response message \(msg)")
             throw ControllerError.internalError("authorizeSnapshot failed: \(msg)")
         }
 
@@ -774,8 +798,24 @@ final class WebSocketController: NSObject, URLSessionWebSocketDelegate {
             throw ControllerError.internalError("Invalid JSON from authorizeSnapshot")
         }
 
-        OracledbLogger.info("authorizeSnapshot")
+        OracledbLogger.info("authorizeSnapshot for \(authPath)")
         return dict
+    }
+
+    private func getBaseSnapshotToken() throws -> [String: Any] {
+        try getSnapshotToken(forAuthPath: QueryHelper.ONPREM)
+    }
+
+    private func getIDCSSnapshotToken() throws -> [String: Any] {
+        try getSnapshotToken(forAuthPath: QueryHelper.IDCS)
+    }
+
+    /// Retrieves the snapshot token required for WebSocket authentication.
+    private func getSnapshotToken() throws -> [String: Any] {
+        if oracledb.app.options.authType == "idcs" {
+            return try getIDCSSnapshotToken()
+        }
+        return try getBaseSnapshotToken()
     }
 
     /// Builds the realtime WebSocket URL based on configured ORDS host/port/schema and the provided snapshot credential.

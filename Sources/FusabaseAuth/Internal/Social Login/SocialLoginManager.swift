@@ -39,6 +39,44 @@ class SocialLoginManager: NSObject {
 
     private var session: ASWebAuthenticationSession?
     
+    nonisolated private static func invalidCallbackError() -> NSError {
+        NSError(
+            domain: "sociallogin",
+            code: 99,
+            userInfo: [NSLocalizedDescriptionKey: "Invalid callback URL or missing token data"]
+        )
+    }
+    
+    nonisolated private static func duplicateCodeError() -> NSError {
+        NSError(
+            domain: "sociallogin",
+            code: 99,
+            userInfo: [NSLocalizedDescriptionKey: "Invalid callback URL: duplicate authorization code"]
+        )
+    }
+    
+    nonisolated static func extractAuthorizationCode(from respValue: String) throws -> String {
+        var code: String?
+        
+        let pairs = respValue.split(separator: "&", omittingEmptySubsequences: false)
+        for pair in pairs {
+            let keyValue = pair.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            guard keyValue.count == 2 else { continue }
+            
+            let key = String(keyValue[0]).removingPercentEncoding ?? String(keyValue[0])
+            let value = String(keyValue[1]).removingPercentEncoding ?? String(keyValue[1])
+            
+            guard key == "code" else { continue }
+            guard !value.isEmpty else { throw invalidCallbackError() }
+            guard code == nil else { throw duplicateCodeError() }
+            
+            code = value
+        }
+        
+        guard let code else { throw invalidCallbackError() }
+        return code
+    }
+    
     /// Struct to return the token information
     /// Persist tokens to Keychain and expose them via computed properties.
     public struct AuthTokens {
@@ -181,20 +219,12 @@ class SocialLoginManager: NSObject {
                     return
                 }
                 
-                // From the parsed callback url we obtain the code 
-                let pairs = respValue.components(separatedBy: "&")
-                for pair in pairs {
-                    let keyValue = pair.components(separatedBy: "=")
-                    if keyValue.count == 2, keyValue[0] == "code" {
-                        continuation.resume(returning: keyValue[1])
-                    } else {
-                        continuation.resume(throwing: NSError(
-                            domain: "sociallogin",
-                            code: 99,
-                            userInfo: [NSLocalizedDescriptionKey: "Invalid callback URL or missing token data"]
-                        ))
-                        return
-                    }
+                // From the parsed callback url we obtain the code.
+                do {
+                    let code = try extractAuthorizationCode(from: respValue)
+                    continuation.resume(returning: code)
+                } catch {
+                    continuation.resume(throwing: error)
                 }
             }
 
@@ -329,20 +359,12 @@ class SocialLoginManager: NSObject {
                     return
                 }
                 
-                // From the parsed callback url we obtain the code
-                let pairs = respValue.components(separatedBy: "&")
-                for pair in pairs {
-                    let keyValue = pair.components(separatedBy: "=")
-                    if keyValue.count == 2, keyValue[0] == "code" {
-                        continuation.resume(returning: keyValue[1])
-                    } else {
-                        continuation.resume(throwing: NSError(
-                            domain: "sociallogin",
-                            code: 99,
-                            userInfo: [NSLocalizedDescriptionKey: "Invalid callback URL or missing token data"]
-                        ))
-                        return
-                    }
+                // From the parsed callback url we obtain the code.
+                do {
+                    let code = try extractAuthorizationCode(from: respValue)
+                    continuation.resume(returning: code)
+                } catch {
+                    continuation.resume(throwing: error)
                 }
             }
 

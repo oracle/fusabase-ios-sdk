@@ -27,6 +27,7 @@
 
 import Security
 import Foundation
+import CryptoKit
 
 @available(iOS 15, tvOS 13, macOS 10.15, watchOS 7, *)
 package class PersistenceUtils {
@@ -34,10 +35,46 @@ package class PersistenceUtils {
     public static let logger = FusabaseLogger(category: "core.persistence")
     
     // Keychain configuration
-    private static let keychainService: String = {
-        // Prefer the host app's bundle identifier to scope Keychain items
-        return Bundle.main.bundleIdentifier ?? "com.oracle.database.fusabase"
-    }()
+    private static let fallbackKeychainServicePrefix = "com.oracle.database.fusabase"
+    private static let keychainServiceLock = NSLock()
+    private static var configuredFallbackKeychainService: String?
+
+    package static func configureKeychainService(options: FusabaseOptions) {
+        let service = derivedFallbackKeychainService(options: options)
+        keychainServiceLock.lock()
+        configuredFallbackKeychainService = service
+        keychainServiceLock.unlock()
+    }
+
+    package static func derivedFallbackKeychainService(options: FusabaseOptions) -> String {
+        let fingerprintSource = [
+            options.projectId,
+            options.appId
+        ]
+        .map { "\($0.utf8.count):\($0)" }
+        .joined(separator: "|")
+
+        let digest = SHA256.hash(data: Data(fingerprintSource.utf8))
+        let fingerprint = digest.map { String(format: "%02x", $0) }.joined()
+        return "\(fallbackKeychainServicePrefix).\(fingerprint)"
+    }
+
+    private static func keychainService() -> String {
+        if let bundleIdentifier = Bundle.main.bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !bundleIdentifier.isEmpty {
+            return bundleIdentifier
+        }
+
+        keychainServiceLock.lock()
+        let service = configuredFallbackKeychainService
+        keychainServiceLock.unlock()
+
+        guard let service else {
+            fatalError("FusabaseApp.configure(options:) must be called before using Keychain storage when Bundle.main.bundleIdentifier is nil.")
+        }
+        return service
+    }
+
     // Accessibility attribute only applies on iOS/tvOS/watchOS
     #if os(iOS) || os(tvOS) || os(watchOS)
     private static let keychainAccessible: CFString? = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
@@ -92,7 +129,7 @@ package class PersistenceUtils {
         var baseQuery: [String: Any] = [
             kSecClass as String             : kSecClassGenericPassword,
             kSecAttrAccount as String       : key,
-            kSecAttrService as String       : keychainService
+            kSecAttrService as String       : keychainService()
         ]
         if let accessible = keychainAccessible {
             baseQuery[kSecAttrAccessible as String] = accessible
@@ -120,7 +157,7 @@ package class PersistenceUtils {
         let query: [String: Any] = [
             kSecClass as String             : kSecClassGenericPassword,
             kSecAttrAccount as String       : key,
-            kSecAttrService as String       : keychainService,
+            kSecAttrService as String       : keychainService(),
             kSecReturnData as String        : true,
             kSecMatchLimit as String        : kSecMatchLimitOne
         ]
@@ -149,7 +186,7 @@ package class PersistenceUtils {
         let query: [String: Any] = [
             kSecClass as String          : kSecClassGenericPassword,
             kSecAttrAccount as String    : key,
-            kSecAttrService as String    : keychainService
+            kSecAttrService as String    : keychainService()
         ]
         SecItemDelete(query as CFDictionary)
     }

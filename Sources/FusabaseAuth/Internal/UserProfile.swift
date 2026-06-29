@@ -28,10 +28,12 @@
 struct UserProfile {
     var displayName: String?
     var phoneNumber: String?
+    var photoURL: String?
 
-    init(displayName: String? = nil, phoneNumber: String? = nil) {
+    init(displayName: String? = nil, phoneNumber: String? = nil, photoURL: String? = nil) {
         self.displayName = displayName
         self.phoneNumber = phoneNumber
+        self.photoURL = photoURL
     }
 
     mutating func setDisplayName(newName: String) {
@@ -40,5 +42,9 @@ struct UserProfile {
 
     mutating func setPhoneNumber(newPhone: String) {
         self.phoneNumber = newPhone
+    }
+
+    mutating func setPhotoURL(newPhotoURL: String) {
+        self.photoURL = newPhotoURL
     }
 }

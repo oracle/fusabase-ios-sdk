@@ -27,43 +27,29 @@
 
 class IDCSConfigHelper {
     
-    var AUTHENTICATE_REST_EP = "/sso/v1/sdk/authenticate"
-    var OAUTH_TOKEN_REST_EP = "/oauth2/v1/token"
-    var SELF_ME_REST_EP = "/admin/v1/Me"
-    var LOGOUT_REST_EP = "/oauth2/v1/userlogout"
-    var REVOKE_REFRESH_TOKEN_REST_EP = "/oauth2/v1/revoke"
-    var SEND_PASSWORD_RESET_EMAIL = "/admin/v1/MePasswordResetRequestor"
-    var CONFIRM_PASSWORD_RESET = "/admin/v1/MePasswordResetter"
-    var VERIFY_PASSWORD_RESET_CODE = "/admin/v1/UserTokenValidator"
-    var UPDATE_PASSWORD_HELPER = "/admin/v1/MePasswordChanger"
-    var SEND_EMAIL_VERIFICATION = "/admin/v1/MeEmailVerifier"
-    var TOKEN_EXCHANGE_PATH = "tokenExchange"
+    var AUTHENTICATE_PATH = "authenticate"
+    var REVOKE_REFRESH_TOKEN_PATH = "rf/revoke"
+    var SEND_EMAIL_PATH = "sendemail"
+    var VERIFY_CODE_PATH = "verifycode"
+    var RESET_PASSWORD_PATH = "resetpwd"
+    var REDIRECT_RESULT_PATH = "redirectResult"
+    var PROFILE_PATH = "profile"
+    var CHANGE_PASSWORD_PATH = "changePassword"
     var SELF_REGISTER_EP = "useradd"
-    
-    private var _domainURL: String
-    private var _appID: String
-    private var _clientID: String
-    private var _clientSecret: String
 
     
-    init(_domainURL: String, _appID: String, _clientID: String, _clientSecret: String) {
-        self._domainURL = _domainURL
-        self._appID = _appID
-        self._clientID = _clientID
-        self._clientSecret = _clientSecret
+    init(appID: String) {
+        let _appID = appID
         
         // we add the app id to all constants
-        AUTHENTICATE_REST_EP += "?apiKey=" + _appID
-        OAUTH_TOKEN_REST_EP += "?apiKey=" + _appID
-        SELF_ME_REST_EP += "?apiKey=" + _appID
-        LOGOUT_REST_EP += "?apiKey=" + _appID
-        REVOKE_REFRESH_TOKEN_REST_EP += "?apiKey=" + _appID
-        SEND_PASSWORD_RESET_EMAIL += "?apiKey=" + _appID
-        CONFIRM_PASSWORD_RESET += "?apiKey=" + _appID
-        VERIFY_PASSWORD_RESET_CODE += "?apiKey=" + _appID
-        UPDATE_PASSWORD_HELPER += "?apiKey=" + _appID
-        SEND_EMAIL_VERIFICATION += "?apiKey=" + _appID
-        TOKEN_EXCHANGE_PATH += "?apiKey=" + _appID
+        AUTHENTICATE_PATH += "?apiKey=" + _appID
+        REVOKE_REFRESH_TOKEN_PATH += "?apiKey=" + _appID
+        SEND_EMAIL_PATH += "?apiKey=" + _appID
+        VERIFY_CODE_PATH += "?apiKey=" + _appID
+        RESET_PASSWORD_PATH += "?apiKey=" + _appID
+        REDIRECT_RESULT_PATH += "?apiKey=" + _appID
+        PROFILE_PATH += "?apiKey=" + _appID
+        CHANGE_PASSWORD_PATH += "?apiKey=" + _appID
         SELF_REGISTER_EP += "?apiKey=" + _appID
     }
 }

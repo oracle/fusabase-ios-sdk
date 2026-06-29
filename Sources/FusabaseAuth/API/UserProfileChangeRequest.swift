@@ -36,11 +36,13 @@ public class UserProfileChangeRequest: NSObject {
     
     open var displayName: String?
     open var phoneNumber: String?
+    open var photoURL: String?
     
-    init(_user: FusabaseUser, displayName: String? = nil, phoneNumber: String? = nil) {
+    init(_user: FusabaseUser, displayName: String? = nil, phoneNumber: String? = nil, photoURL: String? = nil) {
         self._user = _user
         self.displayName = displayName
         self.phoneNumber = phoneNumber
+        self.photoURL = photoURL
         
         // we initialize the NSObject class
         super.init()
@@ -63,7 +65,7 @@ public class UserProfileChangeRequest: NSObject {
     open func commitChanges() async throws {
         
         // Responsability of the user to provide the correct details
-        let profile = UserProfile(displayName: displayName, phoneNumber: phoneNumber)
+        let profile = UserProfile(displayName: displayName, phoneNumber: phoneNumber, photoURL: photoURL)
         try await _user.updateProfile(newProfile: profile)
     }
 }

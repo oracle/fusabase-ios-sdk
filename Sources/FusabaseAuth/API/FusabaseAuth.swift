@@ -73,7 +73,7 @@ open class FusabaseAuth: NSObject {
         }
         
     }
-    
+
     /// Private initializer that sets up the auth instance with the given app.
     private init(app: FusabaseApp) {
         
@@ -152,8 +152,11 @@ open class FusabaseAuth: NSObject {
             if let userInfo = userData!.userInfo {
                 user = FusabaseUser(user: userInfo, userRefreshToken: userData!.refreshToken, accessToken: userData!.accessToken, auth: self)
             } else {
+                guard let currentUser = completeUser ?? self.currentUser else {
+                    throw AuthErrorUtilities.internalError(message: "User info is required for social sign-in.")
+                }
                 // Linking flow - just update tokens for current user
-                user = completeUser ?? self.currentUser!
+                user = currentUser
                 // Update tokens but don't change user details
                 KeychainTokenStore.shared.write(userData!.accessToken.token, for: .access)
                 if !userData!.refreshToken.isEmpty {
@@ -185,6 +188,15 @@ open class FusabaseAuth: NSObject {
 
         self._userCredential = userCred
         return userCred
+    }
+
+    internal func _createCredentialsFromRedirectResult(_ details: AuthUserCompleteDetails,
+                                                       provider: AuthProvider) async throws -> UserCredential {
+        if self._config.authType == "idcs", !(provider is IDCSAuthProvider) {
+            throw AuthErrorUtilities.operationNotAllowed(message: "IDCS auth type supports only IDCSAuthProvider.")
+        }
+
+        return try await self._createCredentials(userData: details, provider: provider)
     }
     
     /// Internal method that updates the currentUser variable inside of Auth and saves it into the device.
@@ -258,35 +270,16 @@ open class FusabaseAuth: NSObject {
             // On-Prem: use local refresh token directly
             do {
                 if config.authType == "idcs" {
-                    guard let idcsRT = KeychainTokenStore.shared.read(.idcsRefresh), !idcsRT.isEmpty else {
-                        throw AuthErrorUtilities.invalidCredential(message: "Missing IDCS refresh token to refresh access token.")
-                    }
                     guard let idcsUserHelper = self._userHelper as? IDCSUserHelper else {
                         throw AuthErrorUtilities.internalError(message: "IDCS refresh helper not available")
                     }
-                    // Refresh IDCS tokens first
-                    let idcsResp = try await idcsUserHelper.refreshAccessToken(refreshToken: idcsRT)
-                    // Exchange the refreshed IDCS access token for FUSABASE tokens
-                    guard let idcsAuthHelper = self._authHelper as? IDCSAuthHelper else {
-                        throw AuthErrorUtilities.internalError(message: "IDCS token exchange helper not available")
-                    }
-                    let fusabaseTokens = try await idcsAuthHelper.getFusabaseToken(authCredential: AuthTokenResult(rawToken: "", tokenKey: .authn, persist: false), profileCredential: idcsResp)
-
-                    // Update access/refresh from exchanged FUSABASE tokens
-                    accessToken = try AuthTokenResult(token: fusabaseTokens.access_token, userType, tokenKey: .access)
-                    if let newRefresh = fusabaseTokens.refresh_token, !newRefresh.isEmpty {
+                    let tokenResp = try await idcsUserHelper.refreshAccessToken(refreshToken: refreshToken)
+                    accessToken = try AuthTokenResult(token: tokenResp.access_token, userType, tokenKey: .access)
+                    if let newRefresh = tokenResp.refresh_token, !newRefresh.isEmpty {
                         refreshToken = newRefresh
                     }
-                    // Persist IDCS tokens if provided
-                    if let ia = fusabaseTokens.idcs_access_token, !ia.isEmpty {
-                        KeychainTokenStore.shared.write(ia, for: .idcsAccess)
-                    }
-                    if let ir = fusabaseTokens.idcs_refresh_token, !ir.isEmpty {
-                        KeychainTokenStore.shared.write(ir, for: .idcsRefresh)
-                    }
-                    // Persist FUSABASE access and refresh (guard refresh)
-                    KeychainTokenStore.shared.write(fusabaseTokens.access_token, for: .access)
-                    if let newRefresh = fusabaseTokens.refresh_token, !newRefresh.isEmpty {
+                    KeychainTokenStore.shared.write(tokenResp.access_token, for: .access)
+                    if let newRefresh = tokenResp.refresh_token, !newRefresh.isEmpty {
                         KeychainTokenStore.shared.write(newRefresh, for: .refresh)
                     }
                 } else {
@@ -315,10 +308,7 @@ open class FusabaseAuth: NSObject {
         
         // we obtain the user details
         if config.authType == "idcs" {
-            guard let idcsAccessToken = KeychainTokenStore.shared.read(.idcsAccess), !idcsAccessToken.isEmpty else {
-                throw AuthErrorUtilities.internalError(message: "No IDCS access token available for user details retrieval")
-            }
-            userDetails = try await self._authHelper._getUserDetailsIDCS(accessToken: AuthTokenResult(token: idcsAccessToken, "idcsuser", tokenKey: .idcsAccess))
+            userDetails = try await self._authHelper._getUserDetailsIDCS(accessToken: accessToken)
         }
         
         else {
@@ -427,23 +417,22 @@ open class FusabaseAuth: NSObject {
     ///
     /// - Throws: Error if sign out fails.
     open func signOut() async throws {
-        
         // we delete data
         KeychainTokenStore.shared.delete(.access)
         let tempRefreshToken = KeychainTokenStore.shared.read(.refresh) ?? ""
         KeychainTokenStore.shared.delete(.refresh)
         KeychainTokenStore.shared.delete(.userEmail)
         KeychainTokenStore.shared.delete(.userPassword)
-        
+
         //
         if currentUser == nil {
             AuthLogger.warning("No user signed in to perform sign out operation. Local data has been deleted.")
             return
         }
-        
+
         // we perform it's necessary operations
         try await self._authHelper.performSignOut(refreshToken: tempRefreshToken)
-        
+
         // we delete data
         KeychainTokenStore.shared.delete(.access)
         KeychainTokenStore.shared.delete(.refresh)
@@ -472,7 +461,7 @@ open class FusabaseAuth: NSObject {
             do {
                 // we perform it's necessary operations
                 try await self._authHelper.performSignOut(refreshToken: KeychainTokenStore.shared.read(.refresh) ?? "")
-                
+
                 // we delete data
                 KeychainTokenStore.shared.delete(.access)
                 KeychainTokenStore.shared.delete(.refresh)
@@ -502,14 +491,13 @@ open class FusabaseAuth: NSObject {
     /// - Returns: AuthDataResult containing the signed-in user information.
     /// - Throws: Error if sign-in fails.
     open func signIn(withEmail email: String, password: String) async throws -> AuthDataResult {
-        
         if email.isEmpty || password.isEmpty {
             throw AuthErrorUtilities.invalidEmailError(message: "Provide both email and password for sign-in.")
         }
-        
+
         let userDetails = try await self._authHelper.authenticateAndGetDetails(email: email, password: password)
         let userCredential = try await self._createCredentials(userData: userDetails)
-        
+
         // if both operations are successfull, we remember the password
         KeychainTokenStore.shared.write(password, for: .userPassword)
         return AuthDataResult(user: self.currentUser!, credential: userCredential.credential)
@@ -541,15 +529,14 @@ open class FusabaseAuth: NSObject {
     /// - Returns: AuthDataResult containing the signed-in user information.
     /// - Throws: Error if sign-in fails.
     open func signIn(with credential: AuthCredential) async throws -> AuthDataResult {
-        
         // we first make the needed user details for our internal User object
         let userDetails = try await self._authHelper.signInWithCredential(with: credential)
-        
+
         let userCredential = try await self._createCredentials(userData: userDetails)
-        
+
         // if we're not saving the password, updatePassword won't work !!!
         // PersistenceUtils.saveItem(password, forKey: "USER_PASSWORD")
-        
+
         return AuthDataResult(user: self.currentUser!, credential: userCredential.credential)
     }
     
@@ -608,11 +595,11 @@ open class FusabaseAuth: NSObject {
     /// - Throws: Error if sending fails.
     open func sendPasswordReset() async throws {
         let email = KeychainTokenStore.shared.read(.userEmail) ?? ""
-        
+
         if email.isEmpty {
             throw AuthErrorUtilities.invalidCredential(message: "Couldn't find any saved email to perform the operation. Please sign-in and try again.")
         }
-        
+
         try await self._authHelper.sendPasswordResetHelper(withEmail: email)
     }
     
@@ -640,7 +627,7 @@ open class FusabaseAuth: NSObject {
     /// - Returns: A JSON dictionary with the verification result.
     /// - Throws: Errors bubbled from the underlying helper.
     open func verifyPasswordReset(_ code: String) async throws -> [String: Any] {
-        return try await self._authHelper.verifyPasswordResetCodeHelper(code: code)
+        try await self._authHelper.verifyPasswordResetCodeHelper(code: code)
     }
     
     /// Confirms a password reset using a code.
@@ -651,7 +638,7 @@ open class FusabaseAuth: NSObject {
     /// - Returns: A JSON dictionary with the confirmation result.
     /// - Throws: Errors bubbled from the underlying helper.
     open func confirmPasswordReset(withCode code : String, newPassword: String) async throws -> [String: Any] {
-        return try await self._authHelper.confirmPasswordResetHelper(code: code, newPassword: newPassword)
+        try await self._authHelper.confirmPasswordResetHelper(code: code, newPassword: newPassword)
     }
 
     /// Signs in with the given credential for linking to the current user.

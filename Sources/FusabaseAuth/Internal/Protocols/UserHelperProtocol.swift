@@ -32,8 +32,6 @@
  */
 @available(iOS 15, tvOS 13, macOS 10.15, watchOS 7, *)
 protocol UserHelperProtocol {
-    // helper to format profile operations
-    func _getOperations(_ currentUser: FusabaseUser, newUserProfile: UserProfile) -> [[String: Any]]
     // helper to refresh a user's access token if possible
     func refreshAccessToken(refreshToken: String) async throws -> BearerTokenResponse
     // helper to update a user's password
@@ -47,4 +45,3 @@ protocol UserHelperProtocol {
     // link with auth provider helper
     func linkWithCredential(_ user: FusabaseUser, provider: AuthProvider) async throws
 }
-

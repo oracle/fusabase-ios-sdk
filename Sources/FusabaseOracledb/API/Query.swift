@@ -219,13 +219,12 @@ public class Query: Reference {
     /// Mirrors the Java get(Source source, boolean snapshot) method but adopts Swift's async/await.
     /// - Parameters:
     ///   - source: Desired fetch source. Currently used for API parity; server selection is not altered.
-    ///   - snapshot: Whether to request server-side snapshot processing (currently not altering server behavior).
+    ///   - snapshot: Whether to request server-side snapshot processing.
     /// - Returns: A `QuerySnapshot` containing the fetched documents.
     /// - Throws: An error if the document retrieval fails.
     @available(iOS 15.0, macOS 10.15, *)
     public func getDocuments(source: FusabaseSource, snapshot: Bool = false) async throws -> QuerySnapshot {
-        // For parity with Java API; parameters are accepted but not altering server selection at this time.
-        let promJson = try await self.queryHelper.fetchDocuments(ref: self)
+        let promJson = try await self.queryHelper.fetchDocuments(ref: self, snapshot: snapshot)
         return parseQuerySnapshot(from: promJson)
     }
 
