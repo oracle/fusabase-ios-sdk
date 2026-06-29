@@ -424,7 +424,7 @@ extension QueryHelper {
 
 
     
-    internal func setHttpRequest(queryHelperFunc: QueryHelperFunc, ref: Any, docData: Any? = nil, merge: Bool? = nil, mergeFields: [String]? = nil, txnOp: TransactionOperation? = nil) throws -> URLRequest {
+    internal func setHttpRequest(queryHelperFunc: QueryHelperFunc, ref: Any, docData: Any? = nil, merge: Bool? = nil, mergeFields: [String]? = nil, txnOp: TransactionOperation? = nil, snapshot: Bool = false) throws -> URLRequest {
         
         var db: FusabaseOracledb
         var pathArr: [String]
@@ -549,6 +549,9 @@ extension QueryHelper {
             reqBody["col_group"] = pathArr.first
         } else {
             reqBody["path"] = pathArr
+        }
+        if queryHelperFunc == .qryDoc, snapshot {
+            reqBody["snapshot"] = 1
         }
         
         // 1. get endpointStr

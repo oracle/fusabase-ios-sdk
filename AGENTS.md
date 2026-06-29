@@ -46,7 +46,6 @@ High-level configuration fields include:
 - `useSocket`
 - `uploadChunkSize`
 - `longPollingInterval`
-- `allowsSelfSignedCertificates`
 
 Typical setup:
 

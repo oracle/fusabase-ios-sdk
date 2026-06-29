@@ -37,14 +37,12 @@ struct AuthUserCompleteDetails {
     var refreshToken: String {
         KeychainTokenStore.shared.read(.refresh) ?? ""
     }
-    var authnToken: AuthTokenResult?
     var userInfo: AuthUserInterface?
 
-    init(accessToken: AuthTokenResult, refreshToken: String, authnToken: AuthTokenResult?, userInfo: AuthUserInterface?) {
+    init(accessToken: AuthTokenResult, refreshToken: String, userInfo: AuthUserInterface?) {
         self.accessToken = accessToken
         // Persist provided refresh token to Keychain; avoid storing as a field
         KeychainTokenStore.shared.write(refreshToken, for: .refresh)
-        self.authnToken = authnToken
         self.userInfo = userInfo
     }
 }

@@ -271,33 +271,18 @@ class ListenerManager<K: Reference, T: Snapshot> {
             return
         }
 
-        // Register the query with the controller
+        // Only the first local listener for a canonical query should subscribe
+        // on the server. Additional listeners share that server subscription.
+        let shouldSubscribeOnServer = webSocketController.shouldDeregisterQuery(queryId)
+
         webSocketController.registerQueryWithController(queryId, listenerData: listenerData)
 
-        // Build and send registration frame to server
-        let payload = createWebSocketPayload()
-        webSocketController.registerQueryOnServer(payload: payload, queryId: queryId)
-
-        // Proactively fetch initial snapshot so listeners get their first event
-        // without relying on a server "success" frame timing.
-        if #available(macOS 10.15, iOS 15.0, *) {
-            Task {
-                do {
-                    if let docRef = listenerData.getReference() as? DocumentReference {
-                        let snapshot = try await docRef.getDocument()
-                        listenerData.executeListener(snapshot, nil)
-                    } else if let query = listenerData.getReference() as? Query {
-                        let snapshot = try await query.getDocuments()
-                        listenerData.executeListener(snapshot, nil)
-                    } else {
-                        listenerData.executeListener(nil, NSError(domain: "ListenerManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unsupported reference type for initial snapshot"]))
-                    }
-                } catch {
-                    listenerData.executeListener(nil, error)
-                }
-            }
+        if shouldSubscribeOnServer {
+            let payload = createWebSocketPayload()
+            webSocketController.registerQueryOnServer(payload: payload, queryId: queryId)
         } else {
-            listenerData.executeListener(nil, NSError(domain: "ListenerManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Async operations require macOS 10.15+/iOS 15+"]))
+            webSocketController.putRegistrationSuccessMessage(queryId)
+            webSocketController.processQueue(queryId)
         }
     }
 

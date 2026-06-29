@@ -43,9 +43,6 @@ protocol AuthHelperProtocol {
     // internal helper utility methods
     func _getUserDetails(accessToken: String) throws -> AuthUserInterface
     func _getUserDetailsIDCS(accessToken: AuthTokenResult) async throws -> AuthUserInterface // requires async
-    func getBearerToken() async throws -> AuthTokenResult
-    func getAccessToken(authnToken: AuthTokenResult) async throws -> Any?
-    func getAuthForm(bearerToken: AuthTokenResult) async throws -> AuthForm
     func reloadUser(_ user: FusabaseUser) async throws -> AuthUserInterface
     
     // sign-in with credentials helpers
@@ -82,18 +79,6 @@ protocol AuthHelperProtocol {
  */
 @available(iOS 15, tvOS 13, macOS 10.15, watchOS 7, *)
 extension AuthHelperProtocol {
-    func getBearerToken() async throws -> AuthTokenResult {
-        throw AuthErrorUtilities.operationNotAllowed(message: "Method not supported for your authentication type.")
-    }
-    
-    func getAccessToken(authnToken: AuthTokenResult) async throws -> Any? {
-        throw AuthErrorUtilities.operationNotAllowed(message: "Method not supported for your authentication type.")
-    }
-    
-    func getAuthForm(bearerToken: AuthTokenResult) async throws -> AuthForm {
-        throw AuthErrorUtilities.operationNotAllowed(message: "Method not supported for your authentication type.")
-    }
-    
     func authenticateUser(email: String, password: String) async throws -> AuthenticationDetails {
         throw AuthErrorUtilities.operationNotAllowed(message: "Method not supported for your authentication type.")
     }

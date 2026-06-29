@@ -40,7 +40,6 @@ Important public properties include:
 - `useSocket`
 - `uploadChunkSize`
 - `longPollingInterval`
-- `allowsSelfSignedCertificates`
 - `enableLogging`
 
 IDCS-related settings are also available through `getIDCSConfig()`, `setIDCSConfig(_:)`, and optional values such as `clientID`, `clientSecret`, and `domainURL`.

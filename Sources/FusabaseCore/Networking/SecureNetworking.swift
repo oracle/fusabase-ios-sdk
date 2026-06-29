@@ -41,23 +41,19 @@ public class SecureNetworking {
         if let session = _secureSession {
             return session
         }
-        let config = URLSessionConfiguration.default
-        config.tlsMinimumSupportedProtocolVersion = tls_protocol_version_t.TLSv12
+        let config = secureDefaultConfiguration()
 
-        let session: URLSession
-        // Check if the current app allows self-signed certificates
-        let allowsSelfSigned = FusabaseApp.app()?.options.allowsSelfSignedCertificates == true
-        Self.logger.debug("SecureNetworking: allowsSelfSignedCertificates = \(allowsSelfSigned)")
-        if allowsSelfSigned {
-            let delegate = SelfSignedDelegate()
-            session = URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
-            Self.logger.debug("SecureNetworking: Using SelfSignedDelegate for self-signed certificates")
-        } else {
-            session = URLSession(configuration: config)
-            Self.logger.debug("SecureNetworking: Using standard URLSession (no self-signed certificates)")
-        }
+        let session = URLSession(configuration: config)
+        Self.logger.debug("SecureNetworking: Using standard URLSession")
         _secureSession = session
         return session
+    }
+
+    /// Creates a default URLSessionConfiguration with TLS 1.2 as the minimum supported protocol version.
+    public static func secureDefaultConfiguration() -> URLSessionConfiguration {
+        let config = URLSessionConfiguration.default
+        config.tlsMinimumSupportedProtocolVersion = tls_protocol_version_t.TLSv12
+        return config
     }
 
     /// Reset the session when app configuration changes
@@ -65,29 +61,4 @@ public class SecureNetworking {
         _secureSession = nil
     }
 
-}
-
-/**
-    This should NOT be used in prod. this is just to test https with self-signed certificates
- */
-class SelfSignedDelegate: NSObject, URLSessionDelegate {
-
-    private let logger = FusabaseLogger(category: "networking")
-    func urlSession(_ session: URLSession,
-                    didReceive challenge: URLAuthenticationChallenge,
-                    completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
-
-        logger.debug("SelfSignedDelegate: Received challenge for \(challenge.protectionSpace.host) with method \(challenge.protectionSpace.authenticationMethod)")
-
-        if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
-           let serverTrust = challenge.protectionSpace.serverTrust {
-
-            logger.debug("SelfSignedDelegate: Accepting self-signed certificate for \(challenge.protectionSpace.host)")
-            let credential = URLCredential(trust: serverTrust)
-            completionHandler(.useCredential, credential)
-        } else {
-            logger.debug("SelfSignedDelegate: Not a server trust challenge, cancelling")
-            completionHandler(.cancelAuthenticationChallenge, nil)
-        }
-    }
 }

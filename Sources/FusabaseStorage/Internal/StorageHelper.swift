@@ -335,7 +335,7 @@ class StorageHelper {
                 continuation.resume(with: result)
             }
 
-            let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+            let session = URLSession(configuration: SecureNetworking.secureDefaultConfiguration(), delegate: delegate, delegateQueue: nil)
             sessionBox.session = session
             session.dataTask(with: request).resume()
         }
@@ -361,7 +361,7 @@ class StorageHelper {
                 continuation.resume(with: result)
             }
 
-            let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+            let session = URLSession(configuration: SecureNetworking.secureDefaultConfiguration(), delegate: delegate, delegateQueue: nil)
             sessionBox.session = session
             session.dataTask(with: request).resume()
         }

@@ -99,9 +99,11 @@ open class FusabaseUser: NSObject {
         self.isEmailVerified = (user.emailVerified == "true" || user.emailVerified == "1")
         self.uid = user.id
         self._config = auth.config!
-        if !userRefreshToken.isEmpty { KeychainTokenStore.shared.write(userRefreshToken, for: .refresh) }
-        self.phoneNumber = user.phoneNumbers[0]["num"] ?? "-"
         self._auth = auth
+        if !userRefreshToken.isEmpty {
+            KeychainTokenStore.shared.write(userRefreshToken, for: .refresh)
+        }
+        self.phoneNumber = user.phoneNumbers[0]["num"] ?? "-"
         self.idp_type = user.idp_type
         self.isAnonymous = false
         self.providerID = user.idp_name
@@ -126,9 +128,11 @@ open class FusabaseUser: NSObject {
         self.isEmailVerified = (user.emailVerified == "true" || user.emailVerified == "1")
         self.uid = user.id
         self._config = auth.config!
-        if !userRefreshToken.isEmpty { KeychainTokenStore.shared.write(userRefreshToken, for: .refresh) }
-        self.phoneNumber = user.phoneNumbers[0]["num"] ?? "-"
         self._auth = auth
+        if !userRefreshToken.isEmpty {
+            KeychainTokenStore.shared.write(userRefreshToken, for: .refresh)
+        }
+        self.phoneNumber = user.phoneNumbers[0]["num"] ?? "-"
         self.isAnonymous = false
         self.providerID = user.idp_name
         self.idp_type = user.idp_type
@@ -198,31 +202,17 @@ open class FusabaseUser: NSObject {
         if needsRefresh {
             do {
                 if self._config.authType == "idcs" {
-                    // Use IDCS refresh token to obtain a new IDCS access token, then exchange to FUSABASE access
-                    guard let idcsRT = KeychainTokenStore.shared.read(.idcsRefresh), !idcsRT.isEmpty else {
-                        throw AuthErrorUtilities.invalidCredential(message: "Missing IDCS refresh token to refresh access token.")
-                    }
                     guard let idcsUserHelper = self._userHelper as? IDCSUserHelper else {
                         throw AuthErrorUtilities.internalError(message: "IDCS refresh not available in current context")
                     }
-                    let idcsResp = try await idcsUserHelper.refreshAccessToken(refreshToken: idcsRT)
-                    // Exchange to FUSABASE tokens using the refreshed IDCS access token
-                    guard let idcsAuthHelper = self._authHelper as? IDCSAuthHelper else {
-                        throw AuthErrorUtilities.internalError(message: "IDCS token exchange not available in current context")
+                    guard let rt = self.refreshToken, !rt.isEmpty else {
+                        throw AuthErrorUtilities.invalidCredential(message: "Missing refresh token to refresh access token.")
                     }
-                    let fusabaseTokens = try await idcsAuthHelper.getFusabaseToken(authCredential: AuthTokenResult(rawToken: "", tokenKey: .authn, persist: false), profileCredential: idcsResp)
-                    // Persist FUSABASE tokens
-                    KeychainTokenStore.shared.write(fusabaseTokens.access_token, for: .access)
-                    currentAccess = fusabaseTokens.access_token
-                    if let newRefresh = fusabaseTokens.refresh_token, !newRefresh.isEmpty {
+                    let tokenResp = try await idcsUserHelper.refreshAccessToken(refreshToken: rt)
+                    KeychainTokenStore.shared.write(tokenResp.access_token, for: .access)
+                    currentAccess = tokenResp.access_token
+                    if let newRefresh = tokenResp.refresh_token, !newRefresh.isEmpty {
                         KeychainTokenStore.shared.write(newRefresh, for: .refresh)
-                    }
-                    // Persist IDCS tokens if provided
-                    if let ia = fusabaseTokens.idcs_access_token, !ia.isEmpty {
-                        KeychainTokenStore.shared.write(ia, for: .idcsAccess)
-                    }
-                    if let ir = fusabaseTokens.idcs_refresh_token, !ir.isEmpty {
-                        KeychainTokenStore.shared.write(ir, for: .idcsRefresh)
                     }
                 } else {
                     // On-prem: use local refresh token flow
@@ -257,9 +247,7 @@ open class FusabaseUser: NSObject {
     
     /// Reloads the user's profile and refreshes local state.
     open func reload() async throws {
-        // Ensure the underlying access token is refreshed.
-        // For IDCS this will refresh IDCS tokens and perform tokenExchange to obtain
-        // a fresh FUSABASE/ORDS ACCESS_TOKEN.
+        // Ensure the underlying ORDS access token is refreshed.
         _ = try await self.getIDToken(forcingRefresh: true)
 
         let userDetails = try await self._authHelper.reloadUser(self)
@@ -273,17 +261,17 @@ open class FusabaseUser: NSObject {
     /// - Parameter password: The new password to set.
     open func updatePassword(to password: String) async throws {
         let oldPassword = KeychainTokenStore.shared.read(.userPassword) ?? ""
-        
+
         if oldPassword.isEmpty {
             self.logger.error("Couldn't find any saved password to perform the operation. Please sign-in and try again.")
             throw AuthErrorUtilities.internalError(message: "Couldn't find any saved password to perform the operation. Please sign-in and try again.")
         }
-        
+
         if oldPassword == password {
             self.logger.error("New password can't be the same as the old one.")
             throw AuthErrorUtilities.weakPasswordError(message: "The new password can't be the same as the old password.")
         }
-            
+
         try await _userHelper.updatePasswordHelper(self, oldPassword: oldPassword, newPassword: password)
     }
     
@@ -321,11 +309,11 @@ open class FusabaseUser: NSObject {
     /// Sends a verification email to the user's email address.
     open func sendEmailVerification() async throws {
         let email = KeychainTokenStore.shared.read(.userEmail) ?? ""
-        
+
         if email.isEmpty {
             throw AuthErrorUtilities.nullUser()
         }
-        
+
         let _ = try await self.getIDToken()
         try await self._userHelper.sendEmailVerificationHelper(self, withEmail: email, uid: self.uid)
     }
@@ -353,10 +341,10 @@ open class FusabaseUser: NSObject {
     /// - Returns: An authentication result containing the updated user.
     open func link(with credential: AuthCredential) async throws -> AuthDataResult {
         try await self._userHelper.linkWithCredential(self, credential: credential)
-        
+
         // if it goes through, reload the user
         try await self.reload()
-        
+
         // return the AuthDataResult object
         return AuthDataResult(user: self, credential: credential)
     }

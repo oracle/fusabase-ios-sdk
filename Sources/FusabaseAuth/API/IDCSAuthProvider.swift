@@ -82,40 +82,13 @@ open class IDCSAuthProvider: FederatedAuthProvider, AuthProvider {
      Performs the IDCS redirect flow and returns a populated UserCredential.
      This mirrors the logic in OAuthProvider/SAMLAuthProvider but is provided
      as a dedicated provider to be used by IDCS-specific flows if needed.
-     */
+    */
     open func getCredentialWith(presentationContext: ASWebAuthenticationPresentationContextProviding) async throws -> UserCredential {
         // Acquire user details via redirect (tokens persisted to Keychain)
         let details = try await self.auth._authHelper.signInWithRedirectHelper(providerID: self.providerID,
                                                                                callbackScheme: self.callbackScheme,
                                                                                presentationContext: presentationContext)
-        let refresh = details.refreshToken
-
-        guard let idcsAccessToken = KeychainTokenStore.shared.read(.idcsAccess), !idcsAccessToken.isEmpty else {
-            throw AuthErrorUtilities.internalError(message: "No IDCS access token available for user details retrieval")
-        }
-        let userDetails = try await self.auth._authHelper._getUserDetailsIDCS(accessToken: AuthTokenResult(token: idcsAccessToken, "idcsuser", tokenKey: .idcsAccess))
-
-        let newUser = FusabaseUser(user: userDetails,
-                                userRefreshToken: refresh,
-                                accessToken: details.accessToken,
-                                auth: self.auth)
-
-        try await self.auth.updateCurrentUser(newUser)
-
-        // Construct a generic or provider-specific AuthCredential
-        let idToken = try await newUser.getIDToken()
-        let credential: AuthCredential
-        if self.providerID == "google" {
-            credential = GoogleAuthCredential(withIDToken: idToken, accessToken: idToken)
-        } else if self.providerID == "facebook" {
-            credential = FacebookAuthCredential(withAccessToken: idToken)
-        } else if self.providerID == "github" {
-            credential = GithubAuthCredential(withToken: idToken)
-        } else {
-            credential = AuthCredential(provider: self.providerID)
-        }
-
-        return UserCredential(user: newUser, credential: credential)
+        return try await self.auth._createCredentialsFromRedirectResult(details, provider: self)
     }
 
     #if canImport(UIKit)

@@ -49,13 +49,10 @@ public class FusabaseOptions {
     public private(set) var useSocket: Bool = true
     public private(set) var uploadChunkSize: Int = 1024 * 1024
     public private(set) var longPollingInterval: Int = 29
-    public private(set) var allowsSelfSignedCertificates: Bool = false
     public private(set) var enableLogging: Bool = false
 
     private var _idcsConfig: IDCSConfig?
 
-    public private(set) var clientID: String? = nil
-    public private(set) var clientSecret: String? = nil
     public private(set) var domainURL: String? = nil
 
     private init(values: FusabaseOptionsValues) {
@@ -124,11 +121,8 @@ public class FusabaseOptions {
         self.useSocket = values.useSocket
         self.uploadChunkSize = values.uploadChunkSize
         self.longPollingInterval = values.longPollingInterval
-        self.allowsSelfSignedCertificates = values.allowsSelfSignedCertificates
         self.enableLogging = values.enableLogging
         self._idcsConfig = values.idcsConfig
-        self.clientID = values.clientID
-        self.clientSecret = values.clientSecret
         self.domainURL = values.domainURL
     }
 

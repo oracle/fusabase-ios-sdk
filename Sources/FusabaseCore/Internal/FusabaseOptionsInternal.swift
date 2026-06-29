@@ -42,12 +42,9 @@ internal struct FusabaseOptionsValues {
     let useOracledbVersion: Int
     let useSocket: Bool
     let idcsConfig: IDCSConfig
-    let clientID: String?
-    let clientSecret: String?
     let domainURL: String?
     let uploadChunkSize: Int
     let longPollingInterval: Int
-    let allowsSelfSignedCertificates: Bool
     let enableLogging: Bool
 }
 
@@ -91,31 +88,21 @@ internal class FusabaseOptionsInternal {
             
             
             // placeholder object that contains idcs configuration values
-            var idcsConfig = IDCSConfig("", "", "")
+            var idcsConfig = IDCSConfig("")
             
             // only unwrap idcs values if authType is idcs!
             if authType == "idcs" {
-                guard let idcsConfigDecoded = decoded.idcs_config else {
-                    throw NSError(
-                        domain: "FusabaseOptions.LoadError",
-                        code: 1001,
-                        userInfo: [NSLocalizedDescriptionKey: "idcs_config is missing in the JSON for authType 'idcs'"]
-                    )
-                }
-                // Check for required fields inside idcs_config
-                guard !idcsConfigDecoded.clientId.isEmpty,
-                      !idcsConfigDecoded.clientSecret.isEmpty,
-                      !idcsConfigDecoded.domain_url.isEmpty
+                let idcsDomainUrl = decoded.idcs_domain_url ?? decoded.idcs_config?.domain_url
+                // ORDS mediates IDCS client credentials; mobile clients only require the domain URL.
+                guard let idcsDomainUrl, !idcsDomainUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 else {
                     throw NSError(
                         domain: "FusabaseOptions.LoadError",
-                        code: 1002,
-                        userInfo: [NSLocalizedDescriptionKey: "One or more required properties in idcs_config are missing or empty for authType 'idcs'"]
+                        code: 1001,
+                        userInfo: [NSLocalizedDescriptionKey: "idcs_domain_url is missing or empty in the JSON for authType 'idcs'"]
                     )
                 }
-                idcsConfig.clientId = idcsConfigDecoded.clientId
-                idcsConfig.clientSecret = idcsConfigDecoded.clientSecret
-                idcsConfig.domain_url = idcsConfigDecoded.domain_url
+                idcsConfig.domain_url = idcsDomainUrl
             }
 
             let useOracledbVersion = decoded.version ?? 2
@@ -124,10 +111,7 @@ internal class FusabaseOptionsInternal {
             let useSocket = decoded.use_socket ?? true
             let uploadChunkSize = decoded.upload_chunk_size ?? 1024 * 1024
             let longPollingInterval = decoded.long_polling_interval ?? 29
-            let allowsSelfSignedCertificates = decoded.allows_self_signed_certificates ?? false
             let enableLogging = decoded.enable_logging ?? false
-            Self.logger.debug("FusabaseOptions: allows_self_signed_certificates from config = \(decoded.allows_self_signed_certificates ?? false)")
-            Self.logger.debug("FusabaseOptions: final allowsSelfSignedCertificates = \(allowsSelfSignedCertificates)")
             Self.logger.debug("FusabaseOptions: enable_logging from config = \(decoded.enable_logging ?? false)")
             Self.logger.debug("FusabaseOptions: final enableLogging = \(enableLogging)")
 
@@ -154,12 +138,9 @@ internal class FusabaseOptionsInternal {
                 useOracledbVersion: useOracledbVersion,
                 useSocket: useSocket,
                 idcsConfig: idcsConfig,
-                clientID: idcsConfig.clientId,
-                clientSecret: idcsConfig.clientSecret,
                 domainURL: idcsConfig.domain_url,
                 uploadChunkSize: uploadChunkSize,
                 longPollingInterval: longPollingInterval,
-                allowsSelfSignedCertificates: allowsSelfSignedCertificates,
                 enableLogging: enableLogging
             )
         }

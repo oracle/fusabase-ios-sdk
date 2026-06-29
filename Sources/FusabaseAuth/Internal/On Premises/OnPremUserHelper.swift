@@ -273,11 +273,35 @@ class OnPremUserHelper: UserHelperProtocol {
     }
     
     func linkWithCredential(_ user: FusabaseUser, credential: AuthCredential) async throws {
-        _ = user // Link flow triggers UI, updated user fetched via reload afterward.
+        if let emailCredential = credential as? EmailAuthCredential {
+            try Self.validateEmailCredentialForLinking(emailCredential, currentUserEmail: user.email)
+        }
         
         let authHelper = OnPremAuthHelper(config: _config)
         _ = try await authHelper.signInWithCredentialLinking(credential: credential, link: true)
        
+    }
+
+    static func validateEmailCredentialForLinking(_ credential: EmailAuthCredential, currentUserEmail: String) throws {
+        let credentialEmail = credential.email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedCurrentUserEmail = currentUserEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !credentialEmail.isEmpty,
+              !normalizedCurrentUserEmail.isEmpty,
+              credentialEmail.caseInsensitiveCompare(normalizedCurrentUserEmail) == .orderedSame else {
+            throw AuthErrorUtilities.invalidCredential(message: "Email credential must match the currently signed-in user's email.")
+        }
+    }
+
+    static func withProviderLinkingState<T>(_ operation: () async throws -> T) async throws -> T {
+        KeychainTokenStore.shared.write("true", for: .linking)
+
+        do {
+            return try await operation()
+        } catch {
+            KeychainTokenStore.shared.delete(.linking)
+            throw error
+        }
     }
 
     func linkWithCredential(_ user: FusabaseUser, provider: AuthProvider) async throws {
@@ -291,20 +315,19 @@ class OnPremUserHelper: UserHelperProtocol {
 
         let authHelper = OnPremAuthHelper(config: _config)
 
-        // Store linking flag in keychain to indicate this is a linking flow
-        KeychainTokenStore.shared.write("true", for: .linking)
+        try await Self.withProviderLinkingState {
+            // Perform OAuth redirect flow - the linking flag will be checked in mapTokensToDetails
+            let redirectResult = try await authHelper.signInWithRedirectHelper(providerID: provider.providerID,
+                                                                              callbackScheme: callbackScheme,
+                                                                              presentationContext: DefaultWebAuthProvider.shared,
+                                                                              link: true)
 
-        // Perform OAuth redirect flow - the linking flag will be checked in mapTokensToDetails
-        let redirectResult = try await authHelper.signInWithRedirectHelper(providerID: provider.providerID,
-                                                                          callbackScheme: callbackScheme,
-                                                                          presentationContext: DefaultWebAuthProvider.shared,
-                                                                          link: true)
+            // Extract the access token from the result to create credential
+            let credential = AuthCredential(provider: provider.providerID, idToken: redirectResult.accessToken.token)
 
-        // Extract the access token from the result to create credential
-        let credential = AuthCredential(provider: provider.providerID, idToken: redirectResult.accessToken.token)
-
-        // Use the credential for linking
-        _ = try await authHelper.signInWithCredentialLinking(credential: credential, link: true)
+            // Use the credential for linking
+            _ = try await authHelper.signInWithCredentialLinking(credential: credential, link: true)
+        }
 
         #else
         throw AuthErrorUtilities.operationNotAllowed(message: "Linking with redirect-based flows is not supported on this platform.")
