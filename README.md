@@ -1,6 +1,6 @@
-# Oracle® Backend for Firebase (Fusabase) iOS SDK
+# Oracle® Backend with Firebase APIs (Fusabase) iOS SDK
 
-An iOS SDK for Oracle Backend for Firebase (Fusabase) that provides authentication, document database, storage, and vector search capabilities.
+An iOS SDK for Oracle Backend with Firebase APIs (Fusabase) that provides authentication, document database, storage, and vector search capabilities.
 
 - Authentication (email/password and federated providers), user profile APIs
 - OracleDB document APIs (collections, documents, queries, duality views, transactions, batch)
@@ -8,11 +8,9 @@ An iOS SDK for Oracle Backend for Firebase (Fusabase) that provides authenticati
 - Storage APIs (upload/download, metadata, listing)
 - Automatic initialization from `fusabase-config.json`
 
-<<<<<<< HEAD
-=======
-This Oracle Backend for Firebase iOS SDK follows the Firebase design, API patterns, and rules-based authorization model. Its SDK interfaces are designed to mirror the Firebase SDK interfaces so developers can move across backends with minimal changes. This Oracle Backend for Firebase iOS SDK is a distinct Oracle offering.
+This Oracle Backend with Firebase APIs iOS SDK follows the Firebase design, API patterns, and rules-based authorization model. Its SDK interfaces are designed to mirror the Firebase SDK interfaces so developers can move across backends with minimal changes. This Oracle Backend with Firebase APIs iOS SDK is a distinct Oracle offering.
 
->>>>>>> github/main
+
 ## Requirements
 
 - iOS 15.0+ / macOS 11.0+ / tvOS 13.0+ / watchOS 7.0+
@@ -305,7 +303,7 @@ Notes:
 - The documentation entry point is the `FusabaseCore` module.
 - Docs are generated for `FusabaseCore`, `FusabaseAuth`, `FusabaseOracledb`, and `FusabaseStorage`.
 - A custom DocC header/footer is provided in `Sources/FusabaseCore/FusabaseCore.docc/header.html` and `footer.html`.
-- The generated site title is `Oracle® Backend for Firebase Swift SDK Reference, Release X.Y`.
+- The generated site title is `Oracle® Backend with Firebase APIs Swift SDK Reference, Release X.Y`.
 - Custom templates require DocC's experimental flag: `--experimental-enable-custom-templates`.
 
 ## Building the Project
