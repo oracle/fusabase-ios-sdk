@@ -29,7 +29,6 @@ import Foundation
 import os
 import FusabaseCore
 import AuthenticationServices
-
 @available(iOS 15, tvOS 13, macOS 10.15, watchOS 7, *)
 class IDCSAuthHelper: AuthHelperProtocol {
     
@@ -45,13 +44,21 @@ class IDCSAuthHelper: AuthHelperProtocol {
         self.middleware = IDCSMiddlewareClient(config: _config)
     }
 
-    private func mapNormalizedTokensToDetails(tokens: BearerTokenResponse) async throws -> AuthUserCompleteDetails {
-        IDCSMiddlewareClient.persistNormalizedTokens(tokens)
-        let accessToken = try AuthTokenResult(token: tokens.access_token, "idcsuser", tokenKey: .access)
+    func mapNormalizedTokensToDetails(tokens: BearerTokenResponse, link: Bool = false) async throws -> AuthUserCompleteDetails {
+        if link {
+            return AuthUserCompleteDetails(
+                accessToken: AuthTokenResult(rawToken: tokens.access_token, persist: false),
+                refreshToken: "",
+                userInfo: nil
+            )
+        }
+        let refreshToken = try tokens.requireRefreshTokenForSignIn()
+        let accessToken = try AuthTokenResult(token: tokens.access_token, "idcsuser", tokenKey: .access, persist: false)
         let userDetails = try await self._getUserDetailsIDCS(accessToken: accessToken)
+        IDCSMiddlewareClient.persistNormalizedTokens(tokens, replacingAuthTokens: true)
         return AuthUserCompleteDetails(
             accessToken: accessToken,
-            refreshToken: tokens.refresh_token ?? "",
+            refreshToken: refreshToken,
             userInfo: userDetails
         )
     }
@@ -170,7 +177,7 @@ class IDCSAuthHelper: AuthHelperProtocol {
                 try await self.redirectResult(code: code)
             },
             mapTokensToDetails: { tokens in
-                try await self.mapNormalizedTokensToDetails(tokens: tokens)
+                try await self.mapNormalizedTokensToDetails(tokens: tokens, link: link)
             }
         )
     }

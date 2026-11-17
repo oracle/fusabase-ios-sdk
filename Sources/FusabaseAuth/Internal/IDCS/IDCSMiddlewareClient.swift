@@ -107,7 +107,7 @@ final class IDCSMiddlewareClient {
         )
     }
 
-    static func persistNormalizedTokens(_ tokens: BearerTokenResponse) {
-        AuthMiddlewareClient.persistNormalizedTokens(tokens)
+    static func persistNormalizedTokens(_ tokens: BearerTokenResponse, replacingAuthTokens: Bool = false) {
+        AuthMiddlewareClient.persistNormalizedTokens(tokens, replacingAuthTokens: replacingAuthTokens)
     }
 }

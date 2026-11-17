@@ -86,11 +86,29 @@ public class QuerySnapshot: Snapshot {
     ///   - snaps: The list of query document snapshots.
     ///   - query: The query that produced this snapshot.
     ///   - metadata: The snapshot metadata.
-    init(snaps: [QueryDocumentSnapshot], query: Query, metadata: SnapshotMetadata) {
+    init(
+        snaps: [QueryDocumentSnapshot],
+        query: Query,
+        metadata: SnapshotMetadata,
+        initialDocumentChanges: Bool = false
+    ) {
         self._documents = snaps
         self._query = query
         self._metadata = metadata
-        self._documentChanges = []
+        self._documentChanges = initialDocumentChanges
+            ? snaps.enumerated().map {
+                DocumentChange(type: .added, document: $0.element, oldIndex: UInt.max, newIndex: UInt($0.offset))
+            }
+            : []
+    }
+
+    /// Builds a realtime snapshot from a notification-applied document set.
+    /// Document changes are calculated against the prior authoritative snapshot.
+    init(snaps: [QueryDocumentSnapshot], query: Query, metadata: SnapshotMetadata, previous: QuerySnapshot) {
+        self._documents = snaps
+        self._query = query
+        self._metadata = metadata
+        self._documentChanges = QuerySnapshot.computeChanges(newDocs: snaps, oldSnap: previous)
     }
 
     /// Constructs a QuerySnapshot from polling/query data. Computes document changes by comparing with an old snapshot if provided.
@@ -193,7 +211,10 @@ public class QuerySnapshot: Snapshot {
                 // Compare lastModified; fall back to data equality if needed
                 let oldLM = lastModified(of: oldDoc)
                 let newLM = lastModified(of: doc)
-                if oldLM != newLM {
+                // Some ORDS envelopes provide an opaque etag but no
+                // LAST_MODIFIED timestamp. Fall back to document data so those
+                // realtime updates still produce a modified change.
+                if oldLM != newLM || !sameData(oldDoc, doc) {
                     let oldIdx = oldIndexById[docId].map { UInt($0) } ?? UInt.max
                     let change = DocumentChange(type: .modified,
                                                 document: doc,
@@ -234,6 +255,12 @@ public class QuerySnapshot: Snapshot {
     /// Extracts the lastModified string from a QueryDocumentSnapshot if available.
     private static func lastModified(of snap: QueryDocumentSnapshot) -> String {
         return snap.lastModifiedString()
+    }
+
+    private static func sameData(_ lhs: QueryDocumentSnapshot, _ rhs: QueryDocumentSnapshot) -> Bool {
+        let left = lhs.data() ?? [:]
+        let right = rhs.data() ?? [:]
+        return NSDictionary(dictionary: left).isEqual(to: right)
     }
 }
 

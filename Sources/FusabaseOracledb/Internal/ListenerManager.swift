@@ -74,16 +74,19 @@ class ListenerManager<K: Reference, T: Snapshot> {
     /// - Returns: A dictionary representing the query payload
     private func createWebSocketPayload() -> [String: Any] {
         let pathSegments = ref.path.components(separatedBy: "/")
-        return [
+        var payload: [String: Any] = [
             "path": pathSegments,
-            "conditions": [],
-            "explicitOrder": []
+            "conditions": []
         ]
+        if let query = ref as? Query {
+            payload["conditions"] = query.filterArr.map { $0.toDictionary() }
+        }
+        return payload
     }
 
     /// Computes a query ID from the canonical query payload.
     ///
-    /// - Returns: The query ID as an integer hash
+    /// - Returns: A positive nonzero query ID derived from the canonical payload.
     private func computeQueryId() -> Int {
         let payload = createWebSocketPayload()
 
@@ -92,14 +95,21 @@ class ListenerManager<K: Reference, T: Snapshot> {
         do {
             let canonicalData = try JSONSerialization.data(withJSONObject: sortedPayload, options: [.sortedKeys, .withoutEscapingSlashes])
             let canonicalStr = String(data: canonicalData, encoding: .utf8) ?? ""
-            let javaHash = Self.javaStringHashCode(canonicalStr)
-            OracledbLogger.debug("WS computeQueryId payload=\(canonicalStr) queryId=\(javaHash)")
-            return Int(javaHash)
+            let queryId = Self.positiveQueryId(Self.javaStringHashCode(canonicalStr))
+            OracledbLogger.debug("WS computeQueryId payload=\(canonicalStr) queryId=\(queryId)")
+            return queryId
         } catch {
-            let javaHash = Self.javaStringHashCode(ref.path)
-            OracledbLogger.debug("WS computeQueryId fallback path=\(ref.path) queryId=\(javaHash)")
-            return Int(javaHash)
+            let queryId = Self.positiveQueryId(Self.javaStringHashCode(ref.path))
+            OracledbLogger.debug("WS computeQueryId fallback path=\(ref.path) queryId=\(queryId)")
+            return queryId
         }
+    }
+
+    private static func positiveQueryId(_ hash: Int32) -> Int {
+        // Keep the deterministic Java hash while reserving zero and the sign bit.
+        // This avoids negative IDs in the realtime wire protocol.
+        let id = Int(UInt32(bitPattern: hash) & 0x7fff_ffff)
+        return id == 0 ? 1 : id
     }
 
     private static func javaStringHashCode(_ s: String) -> Int32 {
@@ -143,7 +153,7 @@ class ListenerManager<K: Reference, T: Snapshot> {
             // Deliver callbacks on the main thread by default. This avoids SwiftUI/Combine
             // warnings like "Publishing changes from background threads is not allowed"
             // when app code updates @Published / UI state from snapshot listeners.
-            let executor = MainThreadExecutor()
+            let executor = DispatchQueueExecutor(options?.callbackQueue ?? .main)
             let metadataChanges = options?.metadataChanges ?? .exclude
 
             let listenerData = ListenerData(
@@ -154,6 +164,17 @@ class ListenerManager<K: Reference, T: Snapshot> {
                 executor: executor,
                 metadataChanges: metadataChanges
             )
+
+            // Realtime notifications carry a changed row, not a complete server-evaluated
+            // result set. Do not pretend that joins, vector ranking, or collection-group
+            // queries can be reconciled locally, and never fall back to an implicit refetch.
+            if let query = ref as? Query,
+               query._isColGroup || !query._joins.isEmpty || query._vectorSearch != nil {
+                listenerData.executeListener(nil, OracledbErrorUtilities.invalidArgumentError(
+                    message: "Snapshot listeners are not supported for collection-group, join, or vector-search queries."
+                ))
+                return listenerData.getListenerRegistration()
+            }
 
             listeners[listenerId] = listenerData
 
@@ -178,6 +199,7 @@ class ListenerManager<K: Reference, T: Snapshot> {
     /// - Parameter listenerData: The listener data to remove.
     func removeListener(_ listenerData: ListenerData<K, T>) {
         queue.async {
+            listenerData.deactivate()
             self.listeners.removeValue(forKey: listenerData.getListenerId())
 
             // Stop listening if this was the last listener
@@ -295,10 +317,10 @@ class ListenerManager<K: Reference, T: Snapshot> {
             Task {
                 do {
                     if let docRef = listenerData.getReference() as? DocumentReference {
-                        let snapshot = try await docRef.getDocument()
+                        let snapshot = try await docRef.getDocument(source: .server, snapshot: true)
                         listenerData.executeListener(snapshot, nil)
                     } else if let query = listenerData.getReference() as? Query {
-                        let snapshot = try await query.getDocuments()
+                        let snapshot = try await query.getDocuments(source: .server, snapshot: true)
                         listenerData.executeListener(snapshot, nil)
                     } else {
                         listenerData.executeListener(nil, NSError(domain: "ListenerManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unsupported reference type for initial snapshot"]))

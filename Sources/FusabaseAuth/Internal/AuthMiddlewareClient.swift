@@ -33,7 +33,7 @@ final class AuthMiddlewareClient {
     private let authPath: String
 
     private var baseURL: String {
-        "\(config.ordsHost):\(config.ordsPort)/ords/\(config.schema)/_/baas-services/idm/\(authPath)/\(config.projectId)/"
+        "\(config.ordsBaseURL)_/baas-services/idm/\(authPath)/\(config.projectId)/"
     }
 
     init(config: FusabaseOptions, authPath: String) {
@@ -132,10 +132,17 @@ final class AuthMiddlewareClient {
         }
     }
 
-    static func persistNormalizedTokens(_ tokens: BearerTokenResponse) {
-        KeychainTokenStore.shared.write(tokens.access_token, for: .access)
-        if let refreshToken = tokens.refresh_token, !refreshToken.isEmpty {
-            KeychainTokenStore.shared.write(refreshToken, for: .refresh)
+    static func persistNormalizedTokens(_ tokens: BearerTokenResponse, replacingAuthTokens: Bool = false) {
+        if replacingAuthTokens {
+            KeychainTokenStore.shared.replaceAuthTokens(
+                accessToken: tokens.access_token,
+                refreshToken: tokens.refresh_token
+            )
+        } else {
+            KeychainTokenStore.shared.write(tokens.access_token, for: .access)
+            if let refreshToken = tokens.refresh_token, !refreshToken.isEmpty {
+                KeychainTokenStore.shared.write(refreshToken, for: .refresh)
+            }
         }
         KeychainTokenStore.shared.delete(.authn)
         KeychainTokenStore.shared.delete(.authnRefresh)

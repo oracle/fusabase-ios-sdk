@@ -41,7 +41,7 @@ class OnPremUserHelper: UserHelperProtocol {
         self._config = config
         self._user = nil
 
-        let domainurl = _config.ordsHost + ":" + _config.ordsPort + "/ords/" + _config.schema + "/_/baas-services/idm/onprem/" + _config.projectId + "/"
+        let domainurl = _config.ordsBaseURL + "_/baas-services/idm/onprem/" + _config.projectId + "/"
         self.ordsConfig = OnPremConfigHelper(_domainURL: domainurl, _appID: _config.appId)
     }
     
@@ -179,7 +179,7 @@ class OnPremUserHelper: UserHelperProtocol {
         request.httpMethod = "PUT"
         request.httpBody = jsonData
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(access_token, forHTTPHeaderField: "X-AUTHZ" )
+        request.setValue("Bearer \(access_token)", forHTTPHeaderField: "Authorization")
         
 
         // 5. Perform the request and await the response
@@ -220,7 +220,7 @@ class OnPremUserHelper: UserHelperProtocol {
         var request = URLRequest(url: url!)
         request.httpMethod = "PUT"
         request.httpBody = jsonData
-        request.setValue(access_token, forHTTPHeaderField: "X-AUTHZ" )
+        request.setValue("Bearer \(access_token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-type")
         
         let (data, response) = try await AuthUtils.fusabaseCall(for: request)

@@ -155,24 +155,20 @@ open class FusabaseAuth: NSObject {
                 guard let currentUser = completeUser ?? self.currentUser else {
                     throw AuthErrorUtilities.internalError(message: "User info is required for social sign-in.")
                 }
-                // Linking flow - just update tokens for current user
+                // Linking returns a provider credential without replacing the current session.
                 user = currentUser
-                // Update tokens but don't change user details
-                KeychainTokenStore.shared.write(userData!.accessToken.token, for: .access)
-                if !userData!.refreshToken.isEmpty {
-                    KeychainTokenStore.shared.write(userData!.refreshToken, for: .refresh)
-                }
             }
         } else {
             user = completeUser!
         }
 
-        try await self._updateCurrentUserInternally(user: user, accessToken: try user.getIDToken())
+        // Authentication helpers have already validated and accepted the token pair.
+        // Publishing this result must not start another asynchronous refresh.
+        let accessToken = KeychainTokenStore.shared.read(.access) ?? ""
+        try self._updateCurrentUserInternally(user: user, accessToken: accessToken)
 
         // we return the credential based on the given provider
         var credential: AuthCredential
-        // obtained user access token
-        let accessToken = try await user.getIDToken()
 
         if provider.providerID == "google" {
             credential = GoogleAuthCredential(withIDToken: accessToken, accessToken: accessToken)
@@ -206,12 +202,6 @@ open class FusabaseAuth: NSObject {
     ///   - accessToken: String containing the access token to be saved.
     /// - Throws: Error if the update fails.
     private func _updateCurrentUserInternally(user: FusabaseUser, accessToken: String) throws {
-        self.currentUser = user
-
-        // We notify listeners
-        notifyListeners(auth: self, user: self.currentUser)
-        // We notify ID token listeners
-        notifyIDTokenListeners(auth: self, user: self.currentUser)
 
         // temporary solution for email
         KeychainTokenStore.shared.write(user.email, for: .userEmail)
@@ -220,6 +210,12 @@ open class FusabaseAuth: NSObject {
         // If there's already existing data, it will be overwritten
         KeychainTokenStore.shared.write(user.refreshToken, for: .refresh)
         KeychainTokenStore.shared.write(accessToken, for: .access)
+
+        self.currentUser = user
+        // We notify listeners
+        notifyListeners(auth: self, user: self.currentUser)
+        // We notify ID token listeners
+        notifyIDTokenListeners(auth: self, user: self.currentUser)
 
         AuthLogger.info("Successfully updated current user and saved tokens to the device.")
 
@@ -417,62 +413,45 @@ open class FusabaseAuth: NSObject {
     ///
     /// - Throws: Error if sign out fails.
     open func signOut() async throws {
-        // we delete data
-        KeychainTokenStore.shared.delete(.access)
-        let tempRefreshToken = KeychainTokenStore.shared.read(.refresh) ?? ""
-        KeychainTokenStore.shared.delete(.refresh)
-        KeychainTokenStore.shared.delete(.userEmail)
-        KeychainTokenStore.shared.delete(.userPassword)
+        try await signOutInternal()
+    }
 
-        //
-        if currentUser == nil {
-            AuthLogger.warning("No user signed in to perform sign out operation. Local data has been deleted.")
-            return
-        }
+    private func signOutInternal() async throws {
+        // Notify listeners and end the local session even when remote logout fails.
+        // The remote error still propagates to the caller after cleanup.
+        defer { clearLocalAuthState() }
 
-        // we perform it's necessary operations
-        try await self._authHelper.performSignOut(refreshToken: tempRefreshToken)
-
-        // we delete data
-        KeychainTokenStore.shared.delete(.access)
-        KeychainTokenStore.shared.delete(.refresh)
-        KeychainTokenStore.shared.delete(.userEmail)
-        KeychainTokenStore.shared.delete(.userPassword)
-        self.currentUser = nil
-
-        notifyListeners(auth: self, user: self.currentUser)
-        notifyIDTokenListeners(auth: self, user: self.currentUser)
-
+        let refreshToken = KeychainTokenStore.shared.read(.refresh) ?? ""
+        guard currentUser != nil else { return }
+        try await _authHelper.performSignOut(refreshToken: refreshToken)
         AuthLogger.info("Logged user out of the application.")
     }
-    
+
+    private func clearLocalAuthState() {
+        KeychainTokenStore.shared.delete(.access)
+        KeychainTokenStore.shared.delete(.refresh)
+        KeychainTokenStore.shared.delete(.userEmail)
+        KeychainTokenStore.shared.delete(.userPassword)
+        currentUser = nil
+        notifyListeners(auth: self, user: nil)
+        notifyIDTokenListeners(auth: self, user: nil)
+    }
+
     /// Signs out a user from ORDS with a completion handler.
     ///
     /// - Parameter completion: Completion handler for Obj-C compatibility.
     @objc open func signOut(completion: @escaping (Error?) -> Void) {
-        
+
         // we check if we do have a user signed in
         if currentUser == nil {
             completion(AuthErrorUtilities.invalidCredential(message: "No user signed in to perform sign out operation."))
             return
         }
-        
+
         Task {
             do {
-                // we perform it's necessary operations
-                try await self._authHelper.performSignOut(refreshToken: KeychainTokenStore.shared.read(.refresh) ?? "")
-
-                // we delete data
-                KeychainTokenStore.shared.delete(.access)
-                KeychainTokenStore.shared.delete(.refresh)
-                KeychainTokenStore.shared.delete(.userEmail)
-                KeychainTokenStore.shared.delete(.userPassword)
-                self.currentUser = nil
-
+                try await self.signOutInternal()
                 completion(nil)
-                // we notify listeners
-                notifyListeners(auth: self, user: self.currentUser)
-                notifyIDTokenListeners(auth: self, user: self.currentUser)
             } catch let error as NSError {
                 AuthLogger.error("Couldn't sign out user: \(error)")
                 completion(error)

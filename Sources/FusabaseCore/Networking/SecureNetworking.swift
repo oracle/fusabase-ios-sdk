@@ -34,10 +34,14 @@ public class SecureNetworking {
 
     private static let logger = FusabaseLogger(category: "networking")
 
+    private static let sessionLock = NSLock()
     private static var _secureSession: URLSession?
 
     /// A shared URLSession configured with TLS 1.2 minimum supported protocol version.
     public static var secureSession: URLSession {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+
         if let session = _secureSession {
             return session
         }
@@ -49,6 +53,14 @@ public class SecureNetworking {
         return session
     }
 
+    /// Installs an app-configured session before the first SDK network request.
+    /// Apps can use this to provide narrowly scoped server-trust handling.
+    public static func configureSecureSession(_ session: URLSession) {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        _secureSession = session
+    }
+
     /// Creates a default URLSessionConfiguration with TLS 1.2 as the minimum supported protocol version.
     public static func secureDefaultConfiguration() -> URLSessionConfiguration {
         let config = URLSessionConfiguration.default
@@ -58,6 +70,8 @@ public class SecureNetworking {
 
     /// Reset the session when app configuration changes
     internal static func resetSession() {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
         _secureSession = nil
     }
 

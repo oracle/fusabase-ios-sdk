@@ -1,19 +1,26 @@
-# Oracle® Backend for Firebase (Fusabase) iOS SDK
+<br />
+<p align="center">
+  <img src="assets/fusabase-color.svg" alt="Fusabase logo" width="180" />
+</p>
 
-An iOS SDK for Oracle Backend for Firebase (Fusabase) that provides authentication, document database, storage, and vector search capabilities.
+<h1 align="center">Oracle Backend with Firebase APIs (Fusabase) iOS SDK</h1>
 
-- Authentication (email/password and federated providers), user profile APIs
-- OracleDB document APIs (collections, documents, queries, duality views, transactions, batch)
-- Vector search (dense and sparse embeddings, similarity queries)
-- Storage APIs (upload/download, metadata, listing)
-- Automatic initialization from `fusabase-config.json`
+<p align="center">
+  <a href="https://docs.oracle.com/en/database/oracle/backend-for-firebase/26.3/index.html">Guides</a>
+  ·
+  <a href="https://livelabs.oracle.com/ords/r/dbpm/livelabs/view-workshop?wid=4403&amp;clear=180,RR&amp;session=15619800424542">Free Workshop</a>
+</p>
 
-<<<<<<< HEAD
-=======
-This Oracle Backend for Firebase iOS SDK follows the Firebase design, API patterns, and rules-based authorization model. Its SDK interfaces are designed to mirror the Firebase SDK interfaces so developers can move across backends with minimal changes. This Oracle Backend for Firebase iOS SDK is a distinct Oracle offering.
+A native Swift SDK for Oracle Backend with Firebase APIs (Fusabase). It provides authentication, document database, object storage, and vector search through four public modules:
 
->>>>>>> github/main
-## Requirements
+- `FusabaseCore` — app configuration and shared types
+- `FusabaseAuth` — sign-in, user state, provider flows, and token listeners
+- `FusabaseOracledb` — collections, documents, queries, transactions, vector search, and duality views
+- `FusabaseStorage` — uploads, downloads, metadata, listing, and storage tasks
+
+The SDK can load app settings from a bundled `fusabase-config.json` file or from `FusabaseOptions` you provide. It follows Firebase design patterns, API conventions, and rules-based authorization. Its interfaces mirror Firebase SDK interfaces to help developers move across backends with minimal changes. Fusabase is a distinct Oracle offering.
+
+## Prerequisites
 
 - iOS 15.0+ / macOS 11.0+ / tvOS 13.0+ / watchOS 7.0+
 - Swift 5.10+
@@ -71,7 +78,6 @@ Example `fusabase-config.json`:
   "use_socket": true,
   "upload_chunk_size": 1048576,
   "long_polling_interval": 3000,
-  "idcs_domain_url": "https://idcs-guid.oraclecloud.com"
 }
 ```
 
@@ -281,11 +287,9 @@ For social login via redirect, register a custom URL scheme:
 </array>
 ```
 
-## Documentation (Swift-DocC)
+## Documentation
 
-This package uses **Swift-DocC** (Apple tooling) via the SwiftPM plugin.
-
-Generate the static documentation site:
+Generate the Swift-DocC API reference:
 
 ```bash
 make docs
@@ -302,10 +306,8 @@ python3 -m http.server --directory docs
 Then open `http://localhost:8000/documentation/`.
 
 Notes:
-- The documentation entry point is the `FusabaseCore` module.
 - Docs are generated for `FusabaseCore`, `FusabaseAuth`, `FusabaseOracledb`, and `FusabaseStorage`.
 - A custom DocC header/footer is provided in `Sources/FusabaseCore/FusabaseCore.docc/header.html` and `footer.html`.
-- The generated site title is `Oracle® Backend for Firebase Swift SDK Reference, Release X.Y`.
 - Custom templates require DocC's experimental flag: `--experimental-enable-custom-templates`.
 
 ## Building the Project
@@ -329,6 +331,10 @@ swift test --enable-code-coverage
 - `fusabase-config.json` is not found — place the config file in the project root.
 - Cannot read `fusabase-config.json` — validate JSON and ensure the file is readable.
 - Social login redirect not working — add `CFBundleURLTypes` to Info.plist and set the scheme.
+
+## Trademarks
+
+Firebase is a trademark of Google LLC. The Firebase name describes the design patterns and SDK interfaces that Oracle Backend with Firebase APIs follows for developer familiarity and ease of migration. It does not imply affiliation with or endorsement by Google.
 
 ## Contributing
 

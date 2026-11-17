@@ -73,23 +73,22 @@ internal class FusabaseOptionsInternal {
             
             let inHost = decoded.ords_host
             guard let url = URL(string: inHost),
-                  let host = url.host,
-                  let port = url.port,
-                  let scheme = url.scheme else {
+                  url.host != nil,
+                  url.scheme != nil else {
                 Self.logger.error("Invalid URL or missing components in \(inHost)")
                 return nil
             }
 
-            // Preserve the original scheme (http/https) from the config
-            // Note: ordsHost should be just scheme://host, ordsPort should be the port number
-            // Any path in the config URL is ignored since /ords/{schema} is added during URL construction
-            let ordsHost = scheme + "://" + host
-            let ordsPort = String(port)
+            // Preserve the configured ORDS base URL, including its ORDS/schema
+            // path. Endpoint builders append their service path directly to it.
+            let ordsHost = inHost.trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            let ordsPort = url.port.map(String.init) ?? ""
             
             
             // placeholder object that contains idcs configuration values
             var idcsConfig = IDCSConfig("")
-            
+
             // only unwrap idcs values if authType is idcs!
             if authType == "idcs" {
                 let idcsDomainUrl = decoded.idcs_domain_url ?? decoded.idcs_config?.domain_url

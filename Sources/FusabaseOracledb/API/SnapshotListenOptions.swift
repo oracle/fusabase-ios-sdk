@@ -63,13 +63,18 @@ public final class SnapshotListenOptions: Equatable {
     /// The source from which to listen for changes.
     public let source: ListenSource
 
+    /// Queue on which application callbacks are delivered. Defaults to the main queue.
+    public let callbackQueue: DispatchQueue
+
     var includeMetadataChanges: Bool
 
     /// Private initializer used by the Builder.
     private init(metadataChanges: MetadataChanges,
-                 source: ListenSource) {
+                 source: ListenSource,
+                 callbackQueue: DispatchQueue) {
         self.metadataChanges = metadataChanges
         self.source = source
+        self.callbackQueue = callbackQueue
         self.includeMetadataChanges = (metadataChanges == .include)
     }
 
@@ -87,6 +92,7 @@ public final class SnapshotListenOptions: Equatable {
         self.metadataChanges = .exclude
         self.source = .default
         self.includeMetadataChanges = false
+        self.callbackQueue = .main
     }
 
     /// Returns a copy of these options toggling whether metadata-only changes
@@ -99,7 +105,8 @@ public final class SnapshotListenOptions: Equatable {
     func withIncludeMetadataChanges(_ includeMetadataChanges: Bool ) -> SnapshotListenOptions {
         let metadata: MetadataChanges = includeMetadataChanges ? .include : .exclude
         return SnapshotListenOptions(metadataChanges: metadata,
-                                     source: self.source)
+                                     source: self.source,
+                                     callbackQueue: self.callbackQueue)
     }
 
     /// Returns a copy of these options using the provided listen source.
@@ -109,7 +116,8 @@ public final class SnapshotListenOptions: Equatable {
     /// - Note: This API is value-oriented. It does not mutate the receiver.
     func withSource(_ source: ListenSource ) -> SnapshotListenOptions {
         return SnapshotListenOptions(metadataChanges: self.metadataChanges,
-                                     source: source)
+                                     source: source,
+                                     callbackQueue: self.callbackQueue)
     }
 
     /// Equatable conformance.
@@ -124,6 +132,14 @@ public final class SnapshotListenOptions: Equatable {
 
         private var _metadataChanges: MetadataChanges?
         private var _source: ListenSource?
+        private var _callbackQueue: DispatchQueue = .main
+
+        /// Sets the queue used to invoke the listener. Defaults to `.main`.
+        @discardableResult
+        public func setCallbackQueue(_ callbackQueue: DispatchQueue) -> Builder {
+            self._callbackQueue = callbackQueue
+            return self
+        }
 
         /// Sets the metadata changes configuration.
         ///
@@ -156,7 +172,8 @@ public final class SnapshotListenOptions: Equatable {
             let metadata = _metadataChanges ?? .exclude
             let source = _source ?? .default
             return SnapshotListenOptions(metadataChanges: metadata,
-                                         source: source)
+                                         source: source,
+                                         callbackQueue: _callbackQueue)
         }
     }
 }
