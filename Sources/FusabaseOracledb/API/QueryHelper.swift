@@ -143,7 +143,7 @@ class QueryHelper {
     @available(macOS 10.15.0, *)
     func deleteDocument(docRef: DocumentReference, completion: ((Error?) -> Void)? = nil) async throws -> [String: Any] {
 
-        let urlStr = options.ordsHost + ":" + options.ordsPort + "/ords/" + options.schema + QueryHelper.BAAS_SERVICE + QueryHelper.DATABASE + "/" + options.projectId + "/" + QueryHelper.DELETE_DOCUMENT
+        let urlStr = options.ordsBaseURL + "_/baas-services/database/" + options.projectId + "/" + QueryHelper.DELETE_DOCUMENT
 
         guard let url = URL(string: urlStr) else {
             throw OracledbErrorUtilities.invalidURLError(message: "Invalid URL")
@@ -398,7 +398,7 @@ class QueryHelper {
      * Fetches documents from the database.
      */
     func fetchDocs(path: [String], payload: [String: Any], operation: TransactionOperation) throws -> [String: Any] {
-        let urlStr = options.ordsHost + ":" + options.ordsPort + "/ords/" + options.schema + QueryHelper.BAAS_SERVICE + QueryHelper.DATABASE + "/" + options.projectId + "/" + (API_VERSION == "2.0" ? QueryHelper.V2 : QueryHelper.V1) + QueryHelper.RUN_QUERY + "?apiKey=" + options.appId
+        let urlStr = options.ordsBaseURL + "_/baas-services/database/" + options.projectId + "/" + (API_VERSION == "2.0" ? QueryHelper.V2 : QueryHelper.V1) + QueryHelper.RUN_QUERY + "?apiKey=" + options.appId
 
         guard let url = URL(string: urlStr) else {
             throw OracledbErrorUtilities.invalidURLError(message: "Invalid URL")
@@ -444,7 +444,7 @@ class QueryHelper {
      * Removes documents from the database.
      */
     func removeDocs(path: [String], entityReference: Any, operation: TransactionOperation) throws -> [String: Any] {
-        let urlStr = options.ordsHost + ":" + options.ordsPort + "/ords/" + options.schema + QueryHelper.BAAS_SERVICE + QueryHelper.DATABASE + "/" + options.projectId + "/" + QueryHelper.DELETE_DOCUMENT
+        let urlStr = options.ordsBaseURL + "_/baas-services/database/" + options.projectId + "/" + QueryHelper.DELETE_DOCUMENT
 
         guard let url = URL(string: urlStr) else {
             throw OracledbErrorUtilities.invalidURLError(message: "Invalid URL")
@@ -509,7 +509,7 @@ class QueryHelper {
     func setDocs(path: [String], data: Any, setOptions: SetOptions?, entityReference: Any, operation: TransactionOperation) throws -> [String: Any] {
         // Versioned endpoint for setDocument (parity with Android)
         let versionSegment = (API_VERSION == "2.0") ? QueryHelper.V2 : QueryHelper.V1
-        let urlStr = options.ordsHost + ":" + options.ordsPort + "/ords/" + options.schema + QueryHelper.BAAS_SERVICE + QueryHelper.DATABASE + "/" + options.projectId + "/" + versionSegment + "/" + QueryHelper.SET_DOCUMENT
+        let urlStr = options.ordsBaseURL + "_/baas-services/database/" + options.projectId + "/" + versionSegment + "/" + QueryHelper.SET_DOCUMENT
 
         guard let url = URL(string: urlStr) else {
             throw OracledbErrorUtilities.invalidURLError(message: "Invalid URL")
@@ -602,7 +602,7 @@ class QueryHelper {
     func updateDocs(path: [String], data: [AnyHashable: Any], entityReference: Any, operation: TransactionOperation, conditions: [[String: Any]]? = nil) throws -> [String: Any] {
         // Versioned endpoint for updateDocument (parity with Android)
         let versionSegment = (API_VERSION == "2.0") ? QueryHelper.V2 : QueryHelper.V1
-        let urlStr = options.ordsHost + ":" + options.ordsPort + "/ords/" + options.schema + QueryHelper.BAAS_SERVICE + QueryHelper.DATABASE + "/" + options.projectId + "/" + versionSegment + "/" + QueryHelper.UPDATE_DOCUMENT
+        let urlStr = options.ordsBaseURL + "_/baas-services/database/" + options.projectId + "/" + versionSegment + "/" + QueryHelper.UPDATE_DOCUMENT
 
         guard let url = URL(string: urlStr) else {
             throw OracledbErrorUtilities.invalidURLError(message: "Invalid URL")

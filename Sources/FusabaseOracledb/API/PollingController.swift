@@ -227,20 +227,14 @@ final class PollingController<K: Reference, T: Snapshot> {
                             let prev = listenerData.getPreviousResult()
                             if !listenerData.hasDeliveredInitialEvent || self.resultHasUpdated(current: snap, previous: prev) {
                                 OracledbLogger.info("Polling request succeeded for query \(query.path)")
-                                DispatchQueue.main.async {
-                                    listenerData.executeListener(snap, nil)
-                                }
+                                listenerData.executeListener(snap, nil)
                             }
                         } else {
-                            DispatchQueue.main.async {
-                                listenerData.executeListener(nil, PollingControllerError.internalError("Async getDocuments requires macOS 10.15+"))
-                            }
+                            listenerData.executeListener(nil, PollingControllerError.internalError("Async getDocuments requires macOS 10.15+"))
                         }
                     } catch {
                         OracledbLogger.error("Polling request failed for query \(query.path)")
-                        DispatchQueue.main.async {
-                            listenerData.executeListener(nil, error)
-                        }
+                        listenerData.executeListener(nil, error)
                     }
                 }
 
@@ -255,29 +249,21 @@ final class PollingController<K: Reference, T: Snapshot> {
                             let prev = listenerData.getPreviousResult()
                             if !listenerData.hasDeliveredInitialEvent || self.resultHasUpdated(current: snap, previous: prev) {
                                 OracledbLogger.info("Polling request succeeded for \(docRef.path)")
-                                DispatchQueue.main.async {
-                                    listenerData.executeListener(snap, nil)
-                                }
+                                listenerData.executeListener(snap, nil)
                             }
                         } else {
                             // Fallback not supported; deliver error
-                            DispatchQueue.main.async {
-                                listenerData.executeListener(nil, PollingControllerError.internalError("Async getDocument requires macOS 10.15+"))
-                            }
+                            listenerData.executeListener(nil, PollingControllerError.internalError("Async getDocument requires macOS 10.15+"))
                         }
                     } catch {
                         OracledbLogger.error("Polling request failed for \(docRef.path)")
-                        DispatchQueue.main.async {
-                            listenerData.executeListener(nil, error)
-                        }
+                        listenerData.executeListener(nil, error)
                     }
                 }
             } else {
                 // Unsupported reference type for now
                 let refPath: String = (listenerData.getReference() as? Reference)?.path ?? "<unknown>"
-                DispatchQueue.main.async {
-                    listenerData.executeListener(nil, PollingControllerError.unsupportedReferenceType("Unsupported reference type for polling at \(refPath)"))
-                }
+                listenerData.executeListener(nil, PollingControllerError.unsupportedReferenceType("Unsupported reference type for polling at \(refPath)"))
             }
         }
     }

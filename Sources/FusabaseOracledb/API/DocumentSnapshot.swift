@@ -274,6 +274,15 @@ public class DocumentSnapshot: Snapshot {
         return self.doc?.getLastModified() ?? ""
     }
 
+    /// Internal realtime identity used to reject stale notification frames.
+    internal func realtimeRowID() -> String {
+        return self.doc?.getRowId() ?? ""
+    }
+
+    internal func realtimeVersion() -> String {
+        return self.doc?.getVersion() ?? ""
+    }
+
     // MARK: - Helpers
 
     /// Returns a value from a nested dictionary (and arrays) using dot-path notation.

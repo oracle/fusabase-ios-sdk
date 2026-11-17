@@ -1,6 +1,6 @@
-# Oracle Backend for Firebase Swift SDK Guide for Coding Agents
+# Oracle Backend with Firebase APIs (Fusabase) Swift SDK Guide for Coding Agents
 
-This repository contains the Oracle Backend for Firebase Swift SDK. The product name is **Oracle Backend for Firebase**. The developer-facing Swift module names use the **`Fusabase...`** prefix.
+This repository contains the Oracle Backend with Firebase APIs (Fusabase) Swift SDK. The product name is **Oracle Backend with Firebase APIs (Fusabase)**. The developer-facing Swift module names use the **`Fusabase...`** prefix.
 
 Use this file as background context when you are scanning the SDK or generating application code that consumes it.
 
@@ -28,7 +28,7 @@ The Swift package publishes four libraries:
 
 ## Configuration
 
-Applications typically configure the SDK with a `FusabaseOptions` instance sourced from the Oracle Backend for Firebase console configuration.
+Applications typically configure the SDK with a `FusabaseOptions` instance sourced from the Oracle Backend with Firebase APIs (Fusabase) console configuration.
 
 High-level configuration fields include:
 

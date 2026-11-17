@@ -577,7 +577,7 @@ extension QueryHelper {
         }
         let endpointStr = needsVersion ? "\(versionSegment)/\(endpointBase)" : endpointBase
         
-        var urlStr: String = db.app.options.ordsHost + ":" + db.app.options.ordsPort + "/ords/" + db.app.options.schema + "/_/baas-services/database/" + db.app.options.projectId + "/" + endpointStr + "?apiKey=" + db.app.options.appId
+        var urlStr: String = db.app.options.ordsBaseURL + "_/baas-services/database/" + db.app.options.projectId + "/" + endpointStr + "?apiKey=" + db.app.options.appId
         guard let url = URL(string: urlStr)
         else {
             throw OracledbErrorUtilities.invalidURLError(message: "Invalid URL")
