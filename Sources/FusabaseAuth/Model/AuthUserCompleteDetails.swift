@@ -33,16 +33,13 @@ import FusabaseCore
 @available(iOS 15, tvOS 13, macOS 10.15, watchOS 7, *)
 struct AuthUserCompleteDetails {
     var accessToken: AuthTokenResult
-    /// Refresh token is not retained in memory; it is persisted to and read from Keychain.
-    var refreshToken: String {
-        KeychainTokenStore.shared.read(.refresh) ?? ""
-    }
+    /// Response value retained until the caller accepts this authentication result.
+    var refreshToken: String
     var userInfo: AuthUserInterface?
 
     init(accessToken: AuthTokenResult, refreshToken: String, userInfo: AuthUserInterface?) {
         self.accessToken = accessToken
-        // Persist provided refresh token to Keychain; avoid storing as a field
-        KeychainTokenStore.shared.write(refreshToken, for: .refresh)
+        self.refreshToken = refreshToken
         self.userInfo = userInfo
     }
 }

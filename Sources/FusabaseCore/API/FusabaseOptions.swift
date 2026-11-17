@@ -51,6 +51,12 @@ public class FusabaseOptions {
     public private(set) var longPollingInterval: Int = 29
     public private(set) var enableLogging: Bool = false
 
+    /// The ORDS base URL supplied in `ords_host`, normalized with one trailing
+    /// slash. It includes any path from the config (for example `/ords/SCOTT/`).
+    public var ordsBaseURL: String {
+        ordsHost.hasSuffix("/") ? ordsHost : ordsHost + "/"
+    }
+
     private var _idcsConfig: IDCSConfig?
 
     public private(set) var domainURL: String? = nil

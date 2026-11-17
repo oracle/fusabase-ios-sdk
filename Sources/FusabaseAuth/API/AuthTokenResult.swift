@@ -64,12 +64,17 @@ open class AuthTokenResult {
     ///   - token: The JWT token string.
     ///   - provider: The sign-in provider (default is "password").
     ///   - authType: The authentication type (default is "basic").
+    ///   - persist: Whether to save the token after parsing. Use false while preparing sign-in.
     /// - Throws: An error if the token cannot be decoded.
-    init(token: String, provider: String = "password", _ authType: String? = "basic", tokenKey: TokenKey = .access) throws {
+    init(token: String, provider: String = "password", _ authType: String? = "basic", tokenKey: TokenKey = .access, persist: Bool = true) throws {
 
         self.parsedJwt = try AuthUtils.decode(jwtToken: token, authType)
         self.tokenKey = tokenKey
-        KeychainTokenStore.shared.write(token, for: tokenKey)
+        if persist {
+            KeychainTokenStore.shared.write(token, for: tokenKey)
+        } else {
+            self.storedToken = token
+        }
 
         self.expirationDate = Date(timeIntervalSince1970: self.parsedJwt.exp)
         self.issuedAtDate = Date(timeIntervalSince1970: self.parsedJwt.iat)

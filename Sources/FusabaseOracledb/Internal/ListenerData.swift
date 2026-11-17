@@ -65,6 +65,8 @@ class ListenerData<K: Reference, T: Snapshot> {
     /// after registration, the listener must receive an initial callback
     /// (snapshot or error) even if the polled result matches the previous one.
     var hasDeliveredInitialEvent: Bool
+    private var active = true
+    private var initialRemoteSnapshotLoading = false
 
     /// Constructs a new ListenerData instance with the provided parameters.
     ///
@@ -148,6 +150,7 @@ class ListenerData<K: Reference, T: Snapshot> {
     ///   - value: The snapshot value to pass to the listener
     ///   - error: Any error that occurred, or nil if successful
     func executeListener(_ value: Snapshot?, _ error: Error?) {
+        guard active else { return }
         // Set the current result as previous result
         self.previousResult = value as? T
 
@@ -156,8 +159,26 @@ class ListenerData<K: Reference, T: Snapshot> {
         self.hasDeliveredInitialEvent = true
 
         self.executor.execute {
+            guard self.active else { return }
             self.listener.onEvent(value as? T, error)
         }
+    }
+
+    func deactivate() { active = false }
+    func isActive() -> Bool { active }
+    func beginInitialRemoteSnapshotLoad() -> Bool {
+        guard !hasDeliveredInitialEvent && !initialRemoteSnapshotLoading else { return false }
+        initialRemoteSnapshotLoading = true
+        return true
+    }
+    func clearInitialRemoteSnapshotLoad() { initialRemoteSnapshotLoading = false }
+
+    /// A new WebSocket connection needs a new authoritative server baseline before
+    /// it can safely accept notification deltas.
+    func resetRealtimeBaseline() {
+        previousResult = nil
+        hasDeliveredInitialEvent = false
+        initialRemoteSnapshotLoading = false
     }
 
     /// Gets the previous result snapshot.

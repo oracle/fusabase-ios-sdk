@@ -72,6 +72,15 @@ package struct KeychainTokenStore: TokenStore {
         PersistenceUtils.saveItem(v, forKey: key.rawValue)
     }
 
+    /// Replace the current authentication token pair without retaining a token
+    /// from a previous sign-in when the new response omits a refresh token.
+    public func replaceAuthTokens(accessToken: String, refreshToken: String?) {
+        delete(.access)
+        delete(.refresh)
+        write(accessToken, for: .access)
+        write(refreshToken, for: .refresh)
+    }
+
     public func read(_ key: TokenKey) -> String? {
         let v = PersistenceUtils.loadItem(forKey: key.rawValue)
         return v.isEmpty ? nil : v

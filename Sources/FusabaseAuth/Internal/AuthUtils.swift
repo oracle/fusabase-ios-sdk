@@ -41,7 +41,7 @@ class AuthUtils {
     static let fusabaseLogger = FusabaseLogger(category: "AuthUtils")
     private static let sensitiveHeaderKeys: Set<String> = ["authorization", "cookie", "set-cookie"]
     private static let sensitiveBodyKeys: Set<String> = [
-        "password", "token", "access_token", "refresh_token", "authtoken", "clientsecret", "code_verifier"
+        "password", "token", "access_token", "refresh_token", "id_token", "id_token_hint", "authtoken", "clientsecret", "code_verifier"
     ]
     private static let redactedValue = "<redacted>"
     private static let maxLoggedBodyLength = 256
@@ -142,7 +142,9 @@ class AuthUtils {
     static func decode(jwtToken jwt: String, _ authType: String? = "basic") throws -> AuthUserFromJWT {
 
         func decodeJWTPart(_ value: String) throws -> AuthUserFromJWT {
-            let bodyData = base64Decode(value)!
+            guard let bodyData = base64Decode(value) else {
+                throw AuthErrorUtilities.malformedJWT(message: "Couldn't decode JWT token received from backend.")
+            }
             
             // if the authentication type is basic, we simply decode it with AuthUserAPI
             if authType == "basic" {
@@ -195,7 +197,17 @@ class AuthUtils {
                             emailVerified = "0"
                         }
                         
-                        let newUser = AuthUserFromJWT(user_displayname: jsonDict["user_displayname"] as! String, user_id: jsonDict["user_id"] as! String, iss: jsonDict["iss"] as! String, idp_name: jsonDict["idp_name"] as! String, creation_time: "-", sub: jsonDict["sub"] as! String, iat: jsonDict["iat"] as! Double, idp_type: jsonDict["idp_type"] as! String, aud: "-", email_verified: emailVerified, scope: "-", exp: jsonDict["exp"] as! Double)
+                        guard let displayName = jsonDict["user_displayname"] as? String,
+                              let userId = jsonDict["user_id"] as? String,
+                              let issuer = jsonDict["iss"] as? String,
+                              let provider = jsonDict["idp_name"] as? String,
+                              let subject = jsonDict["sub"] as? String,
+                              let issuedAt = jsonDict["iat"] as? Double,
+                              let idpType = jsonDict["idp_type"] as? String,
+                              let expiresAt = jsonDict["exp"] as? Double else {
+                            throw AuthErrorUtilities.malformedJWT(message: "Couldn't decode JWT token received from backend.")
+                        }
+                        let newUser = AuthUserFromJWT(user_displayname: displayName, user_id: userId, iss: issuer, idp_name: provider, creation_time: "-", sub: subject, iat: issuedAt, idp_type: idpType, aud: "-", email_verified: emailVerified, scope: "-", exp: expiresAt)
                         return newUser
                     }
                     
@@ -211,6 +223,9 @@ class AuthUtils {
             
         }
         let segments = jwt.components(separatedBy: ".")
+        guard segments.count == 3 else {
+            throw AuthErrorUtilities.malformedJWT(message: "Couldn't decode JWT token received from backend.")
+        }
         return try decodeJWTPart(segments[1])
     }
     
@@ -221,7 +236,9 @@ class AuthUtils {
     static func decodeOnly(jwtToken jwt: String) throws -> [String: Any] {
 
         func decodeJWTPart(_ value: String) throws -> [String: Any] {
-            let bodyData = base64Decode(value)!
+            guard let bodyData = base64Decode(value) else {
+                throw AuthErrorUtilities.malformedJWT(message: "Couldn't decode JWT token received from backend.")
+            }
             
            if let jsonDictionary = try JSONSerialization.jsonObject(with: bodyData, options: []) as? [String: Any] {
                 return jsonDictionary
@@ -232,6 +249,9 @@ class AuthUtils {
         }
         
         let segments = jwt.components(separatedBy: ".")
+        guard segments.count == 3 else {
+            throw AuthErrorUtilities.malformedJWT(message: "Couldn't decode JWT token received from backend.")
+        }
         return try decodeJWTPart(segments[1])
     }
     

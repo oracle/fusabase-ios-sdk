@@ -225,13 +225,13 @@ public class Query: Reference {
     @available(iOS 15.0, macOS 10.15, *)
     public func getDocuments(source: FusabaseSource, snapshot: Bool = false) async throws -> QuerySnapshot {
         let promJson = try await self.queryHelper.fetchDocuments(ref: self, snapshot: snapshot)
-        return parseQuerySnapshot(from: promJson)
+        return parseQuerySnapshot(from: promJson, initialSnapshot: snapshot)
     }
 
     /// Parses the backend response dictionary into a `QuerySnapshot`.
     /// - Parameter promJson: The JSON dictionary returned by the backend.
     /// - Returns: A `QuerySnapshot` built from the response.
-    private func parseQuerySnapshot(from promJson: [String: Any]) -> QuerySnapshot {
+    private func parseQuerySnapshot(from promJson: [String: Any], initialSnapshot: Bool = false) -> QuerySnapshot {
         let metadata1 = SnapshotMetadata(fromCache: false, hasPendingWrites: false)
 
         if !promJson.isEmpty,
@@ -242,7 +242,14 @@ public class Query: Reference {
 
             for elem in retArr {
                 if !elem.isEmpty {
-                    if let osonsData = elem["osons"] as? [String: Any] {
+                    if var osonsData = elem["osons"] as? [String: Any] {
+                        // ORDS carries the physical row id beside `osons` in a
+                        // baseline response. Preserve it internally so later
+                        // notification UPDATE/DELETE envelopes can identify the
+                        // existing snapshot document by rowId.
+                        if osonsData["ROWID"] == nil, let rowId = elem["rid"] as? String {
+                            osonsData["ROWID"] = rowId
+                        }
                         let metadata2 = SnapshotMetadata(fromCache: false, hasPendingWrites: false)
                         if let docId = osonsData["OID"] as? String {
                             let docRef = DocumentReference(oracledb: self.oracledb, path: colRef.path + "/" + docId, parent: colRef)
@@ -259,12 +266,22 @@ public class Query: Reference {
                 }
             }
 
-            return QuerySnapshot(snaps: docSnapArr, query: self, metadata: metadata1)
+            return QuerySnapshot(
+                snaps: docSnapArr,
+                query: self,
+                metadata: metadata1,
+                initialDocumentChanges: initialSnapshot
+            )
         } else {
             OracledbLogger.error("'ret' key is missing, not an array of dictionaries, or empty.")
         }
 
-        return QuerySnapshot(snaps: [], query: self, metadata: metadata1)
+        return QuerySnapshot(
+            snaps: [],
+            query: self,
+            metadata: metadata1,
+            initialDocumentChanges: initialSnapshot
+        )
     }
 
     /**

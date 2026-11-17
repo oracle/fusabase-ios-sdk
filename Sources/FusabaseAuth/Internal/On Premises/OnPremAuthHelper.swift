@@ -55,7 +55,7 @@ class OnPremAuthHelper: AuthHelperProtocol {
     init(config: FusabaseOptions) {
         self._config = config
         self.middleware = AuthMiddlewareClient(config: config, authPath: "onprem")
-        let domainurl = _config.ordsHost + ":" + _config.ordsPort + "/ords/" + _config.schema + "/_/baas-services/idm/onprem/" + _config.projectId + "/"
+        let domainurl = _config.ordsBaseURL + "_/baas-services/idm/onprem/" + _config.projectId + "/"
         self.ordsConfig = OnPremConfigHelper(_domainURL: domainurl, _appID: _config.appId)
     }
     
@@ -212,7 +212,7 @@ class OnPremAuthHelper: AuthHelperProtocol {
         }
     }
 
-    private func mapTokensToDetails(tokens: BearerTokenResponse) throws -> AuthUserCompleteDetails {
+    func mapTokensToDetails(tokens: BearerTokenResponse) throws -> AuthUserCompleteDetails {
         // Check if this is a linking flow by reading the linking flag from keychain
         let isLinking = KeychainTokenStore.shared.read(.linking) != nil
 
@@ -227,21 +227,25 @@ class OnPremAuthHelper: AuthHelperProtocol {
                 userInfo: nil // No user details for linking
             )
         } else {
-            // For regular sign-in flows: persist tokens and parse user details
-            KeychainTokenStore.shared.write(tokens.access_token, for: .access)
-            if let refreshToken = tokens.refresh_token, !refreshToken.isEmpty {
-                KeychainTokenStore.shared.write(refreshToken, for: .refresh)
-            }
-
-            let userDetails = try self._getUserDetails(accessToken: tokens.access_token)
-            return AuthUserCompleteDetails(
-                accessToken: try AuthTokenResult(token: tokens.access_token, tokenKey: .access),
-                refreshToken: tokens.refresh_token ?? "",
-                userInfo: userDetails
-            )
+            return try acceptFreshSignIn(tokens: tokens)
         }
     }
     
+    private func acceptFreshSignIn(tokens: BearerTokenResponse) throws -> AuthUserCompleteDetails {
+        let refreshToken = try tokens.requireRefreshTokenForSignIn()
+        let accessToken = try AuthTokenResult(token: tokens.access_token, tokenKey: .access, persist: false)
+        let userDetails = try self._getUserDetails(accessToken: accessToken.token)
+        KeychainTokenStore.shared.replaceAuthTokens(
+            accessToken: accessToken.token,
+            refreshToken: refreshToken
+        )
+        return AuthUserCompleteDetails(
+            accessToken: accessToken,
+            refreshToken: refreshToken,
+            userInfo: userDetails
+        )
+    }
+
     /**
         Internal method that calls authenticateUser and returns a AuthUserCompleteDetails object
         - Parameter email: String
@@ -251,14 +255,12 @@ class OnPremAuthHelper: AuthHelperProtocol {
     func authenticateAndGetDetails(email: String, password: String) async throws -> AuthUserCompleteDetails {
         let authenticationDetails = try await self.authenticateUser(email: email, password: password)
 
-        // Store the authentication tokens securely in keychain
-        KeychainTokenStore.shared.write(authenticationDetails.access_token.token, for: .access)
-        if !authenticationDetails.refresh_token.isEmpty {
-            KeychainTokenStore.shared.write(authenticationDetails.refresh_token, for: .refresh)
-        }
-
         let userDetails = try self._getUserDetails(accessToken: authenticationDetails.access_token.token)
 
+        KeychainTokenStore.shared.replaceAuthTokens(
+            accessToken: authenticationDetails.access_token.token,
+            refreshToken: authenticationDetails.refresh_token
+        )
         return AuthUserCompleteDetails(accessToken: authenticationDetails.access_token, refreshToken: authenticationDetails.refresh_token, userInfo: userDetails)
 
     }
@@ -270,16 +272,7 @@ class OnPremAuthHelper: AuthHelperProtocol {
      */
     func signInWithCredential(with credential: AuthCredential) async throws -> AuthUserCompleteDetails {
         let authenticationDetails = try await self.signInWithCredentialHelper(credential: credential, link: false)
-
-        // Store the authentication tokens securely in keychain
-        KeychainTokenStore.shared.write(authenticationDetails.access_token, for: .access)
-        if let refreshToken = authenticationDetails.refresh_token, !refreshToken.isEmpty {
-            KeychainTokenStore.shared.write(refreshToken, for: .refresh)
-        }
-
-        let userDetails = try self._getUserDetails(accessToken: authenticationDetails.access_token)
-
-        return AuthUserCompleteDetails(accessToken: try AuthTokenResult(token: authenticationDetails.access_token, tokenKey: .access), refreshToken: authenticationDetails.refresh_token!, userInfo: userDetails)
+        return try acceptFreshSignIn(tokens: authenticationDetails)
     }
 
     /**
@@ -291,18 +284,13 @@ class OnPremAuthHelper: AuthHelperProtocol {
     func signInWithCredentialLinking(credential: AuthCredential, link: Bool) async throws -> AuthUserCompleteDetails {
         let authenticationDetails = try await self.signInWithCredentialHelper(credential: credential, link: link)
 
-        // For linking operations, don't persist the new tokens - they don't replace the user's current tokens
         if !link {
-            // Store the authentication tokens securely in keychain
-            KeychainTokenStore.shared.write(authenticationDetails.access_token, for: .access)
-            if let refreshToken = authenticationDetails.refresh_token, !refreshToken.isEmpty {
-                KeychainTokenStore.shared.write(refreshToken, for: .refresh)
-            }
+            return try acceptFreshSignIn(tokens: authenticationDetails)
         }
 
         let userDetails = try self._getUserDetails(accessToken: authenticationDetails.access_token)
 
-        return AuthUserCompleteDetails(accessToken: AuthTokenResult(rawToken: authenticationDetails.access_token, tokenKey: .access, persist: !link), refreshToken: authenticationDetails.refresh_token!, userInfo: userDetails)
+        return AuthUserCompleteDetails(accessToken: AuthTokenResult(rawToken: authenticationDetails.access_token, tokenKey: .access, persist: false), refreshToken: authenticationDetails.refresh_token ?? "", userInfo: userDetails)
     }
 
     /**
@@ -321,7 +309,7 @@ class OnPremAuthHelper: AuthHelperProtocol {
 
         let userDetails = try self._getUserDetails(accessToken: authenticationDetails.access_token)
 
-        return AuthUserCompleteDetails(accessToken: try AuthTokenResult(token: authenticationDetails.access_token, tokenKey: .access), refreshToken: authenticationDetails.refresh_token!, userInfo: userDetails)
+        return AuthUserCompleteDetails(accessToken: try AuthTokenResult(token: authenticationDetails.access_token, tokenKey: .access), refreshToken: authenticationDetails.refresh_token ?? "", userInfo: userDetails)
     }
     
     /**
@@ -355,7 +343,11 @@ class OnPremAuthHelper: AuthHelperProtocol {
             ],
             methodDescription: "On authenticating user."
         )
-        return AuthenticationDetails(access_token: try AuthTokenResult(token: userDetails.access_token, tokenKey: .access), refresh_token: userDetails.refresh_token!)
+        let refreshToken = try userDetails.requireRefreshTokenForSignIn()
+        return AuthenticationDetails(
+            access_token: try AuthTokenResult(token: userDetails.access_token, tokenKey: .access, persist: false),
+            refresh_token: refreshToken
+        )
 
     }
     

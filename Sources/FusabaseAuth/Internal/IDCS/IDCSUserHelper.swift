@@ -67,7 +67,7 @@ class IDCSUserHelper: UserHelperProtocol {
                 "oldPassword": oldPassword,
                 "password": newPassword
             ],
-            headers: ["X-AUTHZ": accessToken],
+            headers: ["Authorization": "Bearer \(accessToken)"],
             methodDescription: "Update IDCS user password through ORDS."
         )
 
@@ -103,7 +103,7 @@ class IDCSUserHelper: UserHelperProtocol {
             endpoint: middleware.endpoints.PROFILE_PATH,
             method: "PUT",
             body: body,
-            headers: ["X-AUTHZ": accessToken],
+            headers: ["Authorization": "Bearer \(accessToken)"],
             methodDescription: "Update IDCS user profile through ORDS."
         )
 

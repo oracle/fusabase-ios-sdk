@@ -37,8 +37,6 @@ struct FusabaseOptionsData: Codable {
     let project_id: String
     let schema: String
     let storage_bucket: String
-    let idcs_domain_url: String?
-    let idcs_config: IDCSConfig?
     let use_socket: Bool?
     let long_polling_interval: Int?
     let version: Int?

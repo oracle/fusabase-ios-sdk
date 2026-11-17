@@ -268,8 +268,8 @@ class StorageHelper {
         self.bucket = self.storage.app.options.storageBucket
 
         let objType = self.storage.app.options.objsType == "dbfs" ? "dbfs" : "oci-objs"
-        self.endWithProjectId = "\(self.host):\(self.port)/ords/\(self.schema)/_/baas-services/\(objType)/\(self.projectId)"
-        self.endWithParProjectId = "\(self.host):\(self.port)/ords/\(self.schema)/_/baas-services/\(objType)/par/\(self.projectId)"
+        self.endWithProjectId = self.storage.app.options.ordsBaseURL + "_/baas-services/\(objType)/\(self.projectId)"
+        self.endWithParProjectId = self.storage.app.options.ordsBaseURL + "_/baas-services/\(objType)/par/\(self.projectId)"
     }
 
     private func parseObjectSize(from metadataDict: [String: Any]) -> Int64? {

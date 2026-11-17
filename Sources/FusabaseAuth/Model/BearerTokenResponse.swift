@@ -28,9 +28,9 @@ import Foundation
 import FusabaseCore
 
 /**
-    Internal struct BearerTokenResponse that contains bearer token metadata and
-    persists sensitive fields directly to the Keychain via PersistenceUtils.
-    This minimizes keeping tokens in memory by-value or by-reference.
+    Internal struct BearerTokenResponse containing bearer token metadata and
+    response-scoped token values. Callers persist tokens after applying the
+    rules for the authentication flow that produced them.
  */
 @available(iOS 15, tvOS 13, macOS 10.15, watchOS 7, *)
 struct BearerTokenResponse: Codable {
@@ -41,9 +41,11 @@ struct BearerTokenResponse: Codable {
     var token_type: String?
     var expires_in: Int?
 
-    // MARK: - Stored tokens for non-persistent instances
+    // MARK: - Response-scoped token values
     private var stored_access_token: String?
     private var stored_refresh_token: String?
+    private var refresh_token_is_response_scoped = false
+    private var persistTokenMutations = false
 
     // MARK: - Computed properties backed by Keychain or stored values
     // Note: Accessors materialize short-lived Strings only when needed.
@@ -56,9 +58,8 @@ struct BearerTokenResponse: Codable {
             return Self.tokenStore.read(.access) ?? ""
         }
         set {
-            if stored_access_token != nil {
-                stored_access_token = newValue
-            } else {
+            stored_access_token = newValue
+            if persistTokenMutations {
                 Self.tokenStore.write(newValue, for: .access)
             }
         }
@@ -66,15 +67,15 @@ struct BearerTokenResponse: Codable {
 
     var refresh_token: String? {
         get {
-            if let stored = stored_refresh_token {
-                return stored
+            if refresh_token_is_response_scoped {
+                return stored_refresh_token
             }
+            if let stored = stored_refresh_token { return stored }
             return Self.tokenStore.read(.refresh)
         }
         set {
-            if stored_refresh_token != nil {
-                stored_refresh_token = newValue
-            } else {
+            stored_refresh_token = newValue
+            if persistTokenMutations {
                 Self.tokenStore.write(newValue, for: .refresh)
             }
         }
@@ -91,6 +92,10 @@ struct BearerTokenResponse: Codable {
     ) {
         self.token_type = token_type
         self.expires_in = expires_in
+        self.stored_access_token = access_token.isEmpty ? nil : access_token
+        self.stored_refresh_token = refresh_token
+        self.refresh_token_is_response_scoped = true
+        self.persistTokenMutations = persistToKeychain
 
         // Persist sensitive values to Keychain immediately (if requested)
         if persistToKeychain {
@@ -103,6 +108,14 @@ struct BearerTokenResponse: Codable {
         }
     }
 
+    /// Fresh authentication must never inherit a refresh token from another session.
+    func requireRefreshTokenForSignIn() throws -> String {
+        guard let refreshToken = refresh_token, !refreshToken.isEmpty else {
+            throw AuthErrorUtilities.invalidCredential(message: "Authentication response is missing a refresh token.")
+        }
+        return refreshToken
+    }
+
     // MARK: - Codable
 
     private enum CodingKeys: String, CodingKey {
@@ -112,7 +125,7 @@ struct BearerTokenResponse: Codable {
         case refresh_token
     }
 
-    // Custom decoding to persist sensitive values to Keychain
+    // Decode response-scoped token values without falling back to shared Keychain slots.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
@@ -127,28 +140,28 @@ struct BearerTokenResponse: Codable {
 
         token_type = try container.decodeIfPresent(String.self, forKey: .token_type)
         expires_in = try container.decodeIfPresent(Int.self, forKey: .expires_in)
+        stored_access_token = accessToken
+        stored_refresh_token = try container.decodeIfPresent(String.self, forKey: .refresh_token)
+        refresh_token_is_response_scoped = true
+        persistTokenMutations = false
 
-        Self.tokenStore.write(accessToken, for: .access)
-        if let v = try container.decodeIfPresent(String.self, forKey: .refresh_token) {
-            Self.tokenStore.write(v, for: .refresh)
-        }
     }
 
-    // Custom encoding to output original JSON structure
+    // Custom encoding to output this response's token values.
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
 
         try container.encodeIfPresent(token_type, forKey: .token_type)
         try container.encodeIfPresent(expires_in, forKey: .expires_in)
 
-        // Rehydrate from Keychain when encoding
-        if let at = Self.tokenStore.read(.access) {
-            try container.encode(at, forKey: .access_token)
+        if !access_token.isEmpty {
+            try container.encode(access_token, forKey: .access_token)
         }
 
-        if let rt = Self.tokenStore.read(.refresh) {
+        if let rt = refresh_token {
             try container.encode(rt, forKey: .refresh_token)
         }
+
 
     }
 

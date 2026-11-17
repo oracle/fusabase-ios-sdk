@@ -42,6 +42,19 @@ class MainThreadExecutor: Executor {
     }
 }
 
+/// Executes callbacks on a caller-supplied dispatch queue.
+final class DispatchQueueExecutor: Executor {
+    private let queue: DispatchQueue
+
+    init(_ queue: DispatchQueue) {
+        self.queue = queue
+    }
+
+    func execute(_ block: @escaping () -> Void) {
+        queue.async(execute: block)
+    }
+}
+
 /// Executor that runs tasks on a background dispatch queue.
 class BackgroundExecutor: Executor {
     private let queue: DispatchQueue
